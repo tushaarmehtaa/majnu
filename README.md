@@ -1,67 +1,128 @@
-# Save Majnu Bhai · Sprint 3
+# Save Majnu Bhai 
 
-Majnu Bhai’s fate is now scored. Sprint 3 keeps the dark-comedy execution theme, removes AI/custom prompts, and delivers streak-based scoring plus daily and weekly leaderboards on top of the existing gameplay loop.
+A dark-comedy execution-themed word guessing game built with Next.js and TypeScript. Help Majnu Bhai escape his fate by guessing words correctly before it's too late!
+
+## Features
+
+### Gameplay
+- Guess the hidden word before making 5 wrong attempts
+- Six different word categories (domains) to choose from
+- Hints provided based on the selected domain
+- Responsive design that works on all devices
+
+### Scoring & Leaderboards
+- Base score of 3 points per win
+- Streak bonuses from +1 to +5 after 3+ consecutive wins
+- Daily and weekly leaderboards
+- Personal stats tracking (wins, losses, streaks)
+
+### Data Management
+- In-memory storage for development (no setup required)
+- Easy integration with InstantDB for production
+- Persistent user sessions with secure cookies
 
 ## Tech Stack
-- Next.js 16 (App Router, React 19)
-- TypeScript (strict)
-- Tailwind CSS + shadcn/ui
-- InstantDB (in-memory adapter in this repo) for users, games, stats, and leaderboards
+
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript (strict mode)
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Database**: 
+  - Development: In-memory mock
+  - Production: [InstantDB](https://instantdb.com/) (optional)
+- **Deployment**: Vercel (recommended)
 
 ## Getting Started
-```
+
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+
+### Installation
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/save-majnu-bhai.git
+cd save-majnu-bhai
+
+# Install dependencies
 npm install
+
+# Start development server
 npm run dev
-# quality checks
-npm run lint
-npm run build
 ```
 
-### Environment Variables
-Anonymous play works out of the box using the mocked InstantDB client. If you wire this to a real InstantDB project, configure `.env.local` with your credentials (no OpenAI key needed—AI support was removed in Sprint 3).
+### Environment Setup
+Create a `.env.local` file in the root directory with the following variables if using InstantDB in production:
+```env
+INSTANT_APP_ID=your_app_id_here
+INSTANT_API_KEY=your_api_key_here
+```
 
-## Domains (Sprint 3)
-The six execution domains live in `data/domains.json` with 20 words each:
-- fitness – gym and training words
-- ai – ML & AI terminology
-- cinema – films and set slang
-- food – Indian food names
-- sports – games and play terms
-- books – book structure and publishing terms
+## Project Structure
 
-## Feature Highlights
-- Execution-themed landing page with quick access to `/play` and the new `/leaderboard` route.
-- `/play` shows six fixed chips (no custom prompts) and displays the hint badge above the masked word.
-- Scoring and streaks:
-  - Win: +3 base score, with a +1…+5 streak bonus after the third consecutive win.
-  - Loss: –1 and streak reset.
-- Leaderboards:
-  - Daily (`YYYYMMDD`) and weekly (`YYYYWW`) boards stored separately.
-  - Each finish updates leaderboards and `user_stats` in a single routine.
-  - `/api/leaderboard?scope=daily|weekly` returns top 100 plus the requester’s rank.
-  - `/api/me` exposes aggregate totals and streak information.
-- `/leaderboard` UI powered by shadcn Tabs, showing both leaderboards and a personal rank card.
-- Result screen now shows the player’s current/best streak chip.
+```
+majnu/
+├── app/                  # Next.js 13+ app directory
+│   ├── api/              # API routes
+│   ├── play/             # Game page
+│   └── leaderboard/      # Leaderboard page
+├── components/           # Reusable UI components
+├── lib/                  # Utility functions and database logic
+├── public/               # Static assets
+└── data/                 # Game data and word lists
+```
 
-## Acceptance Checklist
-- [x] Domain picker exposes exactly six chips.
-- [x] New game pulls a random word from the selected domain.
-- [x] Wins and losses update streaks, user stats, and both leaderboards.
-- [x] Daily tab reflects today’s plays; weekly tab aggregates the ISO week.
-- [x] “Your Rank” card appears even when outside the top 100.
-- [x] Score calculations follow the base + streak bonus rules.
-- [x] Responsive at 360 px with no layout breakage.
-- [x] No AI/custom-domain remnants in routes or UI.
+## Game Rules
 
-## Sprint Notes
-- **Sprint 1:** Core hangman gameplay, InstantDB-backed persistence, win/loss routing.
-- **Sprint 2:** Added domain picker, hints, and (now-removed) AI custom topics.
-- **Sprint 2.5:** Re-skinned into a Bollywood tragicomedy execution theme with new assets and copy.
-- **Sprint 3:** Removed AI/custom domains, added scoring + streak bonuses, user stats, and daily/weekly leaderboards.
+1. Select a category to start a new game
+2. Guess one letter at a time
+3. Each wrong guess brings Majnu Bhai closer to his fate
+4. Win by guessing the word before making 5 wrong attempts
+5. Build a streak for bonus points!
 
-## Loom / Recording Script (Sprint 3)
-1. “Here’s Save Majnu Bhai — five mistakes and the don pulls the lever.”
-2. “Tap *Start the Execution*, pick a domain chip like `cinema`, and watch the hint badge appear above the word.”
-3. “Play a round, show a win (streak increases) and a loss (streak resets), highlighting the score toast.”
-4. “Open the Leaderboard tab to show daily vs. weekly rankings and the personal rank card.”
-5. “Refresh mid-game to confirm the state resumes, then finish to update streak chips on the result screen.”
+## Scoring System
+
+- **Win**: +3 points + streak bonus
+- **Streak Bonus**: 
+  - 3+ wins: +1 to +5 points
+  - Resets on loss
+- **Loss**: -1 point
+
+## Development
+
+```bash
+# Run development server
+npm run dev
+
+# Run linter
+npm run lint
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Inspired by classic word games with a Bollywood twist
+- Built with Next.js and TypeScript
+- Special thanks to all contributors
+
+---
+
+Made with  and a touch of dark humor
