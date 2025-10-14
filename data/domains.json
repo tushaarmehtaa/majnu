@@ -1,0 +1,26 @@
+{
+  "fitness": {
+    "hint": "gym and training words",
+    "words": ["deadlift","squat","lunge","pushups","plank","cardio","protein","creatine","tabata","yoga","mobility","recovery","sprinting","running","benchpress","dumbbell","burpees","warmup","cooldown","stretch"]
+  },
+  "ai": {
+    "hint": "ml and ai terms",
+    "words": ["dataset","tensor","encoder","decoder","attention","logits","dropout","overfit","epoch","prompt","vector","retriever","indexing","gradient","lossfunc","regularize","scaling","latency","caching","embedding"]
+  },
+  "cinema": {
+    "hint": "films and set slang",
+    "words": ["bollywood","screenplay","director","interval","cameo","trailer","remake","sequel","khiladi","masala","dialogue","villain","heroine","montage","credits","climax","songbook","blockbuster","artfilm","biopic"]
+  },
+  "food": {
+    "hint": "indian food names",
+    "words": ["biryani","dosa","idli","paratha","chaat","samosa","paneer","chutney","poha","upma","kebab","pavbhaji","rajma","chole","jalebi","lassi","poori","khichdi","halwa","rasgulla"]
+  },
+  "sports": {
+    "hint": "games and play terms",
+    "words": ["cricket","tennis","football","kabaddi","hockey","badminton","marathon","sprint","boxing","wrestling","judothrow","offside","wicket","goalie","racket","dribble","freekick","volley","umpire","innings"]
+  },
+  "books": {
+    "hint": "book and parts",
+    "words": ["novel","memoir","fiction","nonfiction","epilogue","prologue","chapter","author","preface","indexpage","glossary","footnote","hardcover","paperback","bookmark","library","dystopia","fantasy","mystery","atlas"]
+  }
+}

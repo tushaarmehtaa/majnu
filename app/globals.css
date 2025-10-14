@@ -1,26 +1,87 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: 40 68% 95%;
+  --foreground: 0 0% 12%;
+
+  --card: 40 68% 95%;
+  --card-foreground: 0 0% 12%;
+
+  --popover: 40 68% 95%;
+  --popover-foreground: 0 0% 12%;
+
+  --primary: 4 62% 48%;
+  --primary-foreground: 40 68% 95%;
+
+  --secondary: 36 90% 80%;
+  --secondary-foreground: 0 0% 12%;
+
+  --muted: 36 90% 80%;
+  --muted-foreground: 0 0% 12%;
+
+  --accent: 4 62% 48%;
+  --accent-foreground: 40 68% 95%;
+
+  --destructive: 4 62% 48%;
+  --destructive-foreground: 40 68% 95%;
+
+  --border: 0 0% 12%;
+  --input: 0 0% 12%;
+  --ring: 4 62% 48%;
+
+  --chart-1: 36 90% 80%;
+  --chart-2: 139 55% 45%;
+  --chart-3: 4 62% 48%;
+  --chart-4: 204 80% 60%;
+  --chart-5: 300 70% 60%;
+
+  --radius: 0.75rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.dark {
+  --background: 0 0% 6%;
+  --foreground: 40 68% 95%;
+
+  --card: 0 0% 10%;
+  --card-foreground: 40 68% 95%;
+
+  --popover: 0 0% 10%;
+  --popover-foreground: 40 68% 95%;
+
+  --primary: 4 62% 48%;
+  --primary-foreground: 40 68% 95%;
+
+  --secondary: 36 90% 80%;
+  --secondary-foreground: 0 0% 12%;
+
+  --muted: 36 90% 80%;
+  --muted-foreground: 0 0% 12%;
+
+  --accent: 4 62% 48%;
+  --accent-foreground: 40 68% 95%;
+
+  --destructive: 4 62% 48%;
+  --destructive-foreground: 40 68% 95%;
+
+  --border: 36 90% 80%;
+  --input: 0 0% 12%;
+  --ring: 4 62% 48%;
+
+  --chart-1: 36 90% 80%;
+  --chart-2: 139 55% 45%;
+  --chart-3: 4 62% 48%;
+  --chart-4: 204 80% 60%;
+  --chart-5: 300 70% 60%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-border;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-background font-sans text-foreground;
+  }
 }
