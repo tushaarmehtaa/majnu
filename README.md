@@ -8,13 +8,33 @@ A dark-comedy execution-themed word guessing game built with Next.js and TypeScr
 - Guess the hidden word before making 5 wrong attempts
 - Six different word categories (domains) to choose from
 - Hints provided based on the selected domain
-- Responsive design that works on all devices
+- Responsive design with cinematic transitions across screens
 
 ### Scoring & Leaderboards
 - Base score of 3 points per win
 - Streak bonuses from +1 to +5 after 3+ consecutive wins
 - Daily and weekly leaderboards
 - Personal stats tracking (wins, losses, streaks)
+
+### Social & Delight
+- Result screen share button with pre-filled copy and OG previews for wins and losses
+- Confetti bursts on victory, red-fade dramatics on defeat
+- Sound design with per-event SFX (correct, wrong, win, loss) and a global mute toggle
+- Lightweight analytics logging (`game_start`, `game_win`, `game_loss`, `share_click`, `sound_toggle`) output to the console for easy wiring later
+
+### Sprint 5 — Hints, Share, Leaderboards
+- Deterministic hint generation with caching and domain-based fallbacks so every round surfaces a clue
+- Twitter-only share button with randomized copy, UTM-tagged intents, and dynamic OG cards rendered by `/api/og/result`
+- Cursor-based daily/weekly leaderboards with paging, live polling, Hot Streak / Comeback badges, and per-minute finish throttling
+- Landing hero widget spotlights today’s top three saviors pulled from the leaderboard API
+
+### Sprint 6 — Identity, Hints, Share Fix, Achievements Base
+- Curated + AI-assisted hints via `/api/generate-hint` with sticky-note presentation on the play screen
+- Lightweight player identities (unique @handles + seeded avatars) required before leaderboard placement
+- Unified sound manager with persistent mute + a “Test” button to unlock audio contexts reliably
+- Dynamic result reveals (uppercase word, loss quip) and short-link powered Twitter shares with bespoke OG cards
+- Leaderboard modal view, reset timers, weekly summary banner, and richer player rows with badges
+- Achievements groundwork (First Blood, Too Slow, Hot Streak) with toast + confetti feedback and cached unlocks
 
 ### Data Management
 - In-memory storage for development (no setup required)
@@ -25,7 +45,9 @@ A dark-comedy execution-themed word guessing game built with Next.js and TypeScr
 
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript (strict mode)
-- **Styling**: Tailwind CSS + shadcn/ui
+- **Styling**: Tailwind CSS + shadcn/ui + custom motion design
+- **Animation**: Framer Motion
+- **Audio tooling**: Hand-rolled mp3 generation (Pillow + lameenc) stored in `public/sfx`
 - **Database**: 
   - Development: In-memory mock
   - Production: [InstantDB](https://instantdb.com/) (optional)
@@ -125,4 +147,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-Made with  and a touch of dark humor
+Made with ❤️ and a touch of dark humor

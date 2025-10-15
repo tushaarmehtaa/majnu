@@ -1,68 +1,138 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { COPY } from "@/lib/copy";
 
 const highlights = [
-  "5 mistakes and Majnu dies.",
-  "Bollywood gallows humor. Anonymous play.",
-  "Custom topics conjure random death words via GPT-4 mini.",
+  "Dark-comedy hangman with Bollywood flair.",
+  "Anonymous play. No accounts. All execution.",
+  "Leaderboards remember the saviors. And the fallen.",
 ];
 
 export default function LandingPage() {
+  const [topPlayers, setTopPlayers] = useState<
+    Array<{ cursor: string; rank: number; handle: string | null; score: number }>
+  >([]);
+  const [topLoading, setTopLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchTop() {
+      try {
+        const response = await fetch("/api/leaderboard?scope=daily&limit=3", {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!isMounted) return;
+        setTopPlayers(payload.items ?? []);
+      } finally {
+        if (isMounted) {
+          setTopLoading(false);
+        }
+      }
+    }
+
+    fetchTop();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
-    <div className="flex min-h-screen flex-col bg-beige text-foreground">
-      <main className="relative flex flex-1 flex-col items-center justify-center px-4 py-24">
-        <div className="pointer-events-none absolute inset-x-0 top-12 flex justify-center opacity-10">
-          <Image
-            src="/majnu-states/1.png"
-            alt="Majnu watermark"
-            width={360}
-            height={320}
-            className="mix-blend-multiply"
-            priority
-          />
-        </div>
-        <section className="relative z-10 mx-auto flex w-full max-w-3xl flex-col gap-10 rounded-3xl bg-beige/95 p-10 shadow-[0_25px_60px_-20px_rgba(192,57,43,0.35)]">
-          <header className="flex flex-col items-center gap-4 text-center">
-            <Badge className="bg-red/10 text-red">Bollywood Tragicomedy</Badge>
-            <h1 className="font-display text-6xl tracking-[0.2em] text-red sm:text-7xl">
-              Save Majnu Bhai
-            </h1>
-            <p className="text-lg font-medium uppercase tracking-[0.3em] text-red">
-              Guess the word. Save the man.
-            </p>
-            <p className="max-w-xl text-balance text-base text-foreground/80">
-              Each wrong guess adds one body part. Five mistakes... and Majnu dies.
-            </p>
-            <p className="animate-pulse text-sm font-semibold uppercase tracking-[0.4em] text-red">
-              5 mistakes and Majnu dies.
-            </p>
-          </header>
-          <ul className="grid gap-3 text-sm text-foreground md:grid-cols-3">
-            {highlights.map((item) => (
-              <li
-                key={item}
-                className="rounded-2xl border border-red/20 bg-white/40 px-4 py-3 text-center font-medium shadow-sm"
-              >
-                {item}
-              </li>
-            ))}
-          </ul>
-          <footer className="flex flex-col items-center justify-between gap-4 text-sm text-foreground/80 md:flex-row">
-            <span>Anonymous play powered by InstantDB — no login, no mercy.</span>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button size="lg" className="bg-red text-beige hover:bg-red/90" asChild>
-                <Link href="/play">🔥 Start the Execution</Link>
-              </Button>
-              <Button variant="outline" className="border-red/40 text-red hover:bg-red/10" asChild>
-                <Link href="/leaderboard">🪦 View the Fallen (Coming Soon)</Link>
-              </Button>
+    <motion.main
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="relative flex min-h-[calc(100vh-5rem)] flex-1 flex-col items-center justify-center px-4 py-24 text-foreground"
+    >
+      <div className="pointer-events-none absolute inset-0 -z-10 flex items-start justify-center opacity-10">
+        <Image
+          src="/majnu-states/1.png"
+          alt="Majnu watermark"
+          width={420}
+          height={380}
+          className="mt-10 max-w-[320px] mix-blend-multiply"
+          priority
+        />
+      </div>
+      <motion.section
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="relative z-10 mx-auto flex w-full max-w-3xl flex-col gap-10 rounded-3xl border border-red/10 bg-white/75 p-10 shadow-[0_30px_80px_-28px_rgba(192,57,43,0.45)] backdrop-blur"
+      >
+        <header className="flex flex-col items-center gap-4 text-center">
+          <Badge className="bg-red/10 text-red shadow-sm">Bollywood Tragicomedy</Badge>
+          <h1 className="font-display text-5xl uppercase tracking-[0.25em] text-red sm:text-7xl">
+            {COPY.landing.title}
+          </h1>
+          <p className="text-lg font-semibold uppercase tracking-[0.3em] text-red">
+            {COPY.landing.subtitle}
+          </p>
+          <p className="max-w-xl text-balance text-base text-foreground/80">
+            Bollywood gallows humor. Each wrong guess adds a limb. Five mistakes and the rope snaps tight.
+          </p>
+          <p className="text-sm font-semibold uppercase tracking-[0.4em] text-red">
+            {COPY.landing.line}
+          </p>
+        </header>
+        <ul className="grid gap-3 text-sm text-foreground md:grid-cols-3">
+          {highlights.map((item) => (
+            <motion.li
+              key={item}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="rounded-2xl border border-red/20 bg-white/70 px-4 py-3 text-center font-medium shadow-sm"
+            >
+              {item}
+            </motion.li>
+          ))}
+        </ul>
+        <div className="rounded-2xl border border-red/20 bg-white/70 p-4 text-sm text-foreground/80">
+          <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.3em] text-foreground/60">
+            <span>Today&apos;s Saviors</span>
+            <span>{topLoading ? "Syncing..." : `Top ${topPlayers.length}`}</span>
+          </div>
+          {topLoading ? (
+            <p className="text-foreground/60">Fetching fresh dangling heroes...</p>
+          ) : topPlayers.length === 0 ? (
+            <p className="text-foreground/60">No wins logged yet. Claim the rope first.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {topPlayers.map((player) => (
+                <div key={player.cursor} className="flex items-center justify-between">
+                  <span>
+                    <span className="font-semibold text-red">#{player.rank}</span>{" "}
+                    {player.handle ?? "Anonymous"}
+                  </span>
+                  <span className="font-mono text-xs text-foreground/60">{player.score} pts</span>
+                </div>
+              ))}
             </div>
-          </footer>
-        </section>
-      </main>
-    </div>
+          )}
+        </div>
+        <footer className="flex flex-col items-center justify-between gap-4 text-sm text-foreground/80 md:flex-row">
+          <span className="text-center md:text-left">
+            Now with sound effects and public executions 🥲
+          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="lg" className="bg-red text-beige hover:bg-red/90" asChild>
+              <Link href="/play">🔥 {COPY.landing.cta}</Link>
+            </Button>
+            <Button variant="outline" className="border-red/40 text-red hover:bg-red/10" asChild>
+              <Link href="/leaderboard">🪦 {COPY.landing.secondary}</Link>
+            </Button>
+          </div>
+        </footer>
+      </motion.section>
+    </motion.main>
   );
 }

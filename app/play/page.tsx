@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
+import confetti from "canvas-confetti";
 
 import domains from "@/data/domains.json";
 import { MAX_WRONG_GUESSES, type GameStatus } from "@/lib/game";
@@ -31,7 +33,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { TOAST_COPY } from "@/lib/copy";
+import { COPY } from "@/lib/copy";
+import { useSound } from "@/hooks/use-sound";
+import { logEvent, setAnalyticsUserId } from "@/lib/analytics";
+import { selectWordForDomain } from "@/lib/word-randomizer";
+import { useUser } from "@/context/user-context";
+import type { AchievementRecord } from "@/lib/instantdb";
 
 type GameState = {
   gameId: string;
@@ -45,12 +52,24 @@ type GameState = {
   wrong_letters: string[];
   finished_at: string | null;
   score_delta?: number | null;
+  score_total?: number | null;
+  rank?: number | null;
+  throttled?: boolean;
+  word_answer?: string;
+  requiresHandle?: boolean;
+  achievements?: AchievementRecord[];
 };
 
 type GameResponse = GameState & {
   isCorrect?: boolean | null;
   isRepeat?: boolean;
   score_delta?: number | null;
+  score_total?: number | null;
+  rank?: number | null;
+  throttled?: boolean;
+  word_answer?: string;
+  requires_handle?: boolean;
+  achievements?: AchievementRecord[];
 };
 
 const STORAGE_KEY = "majnu-active-game";
@@ -71,6 +90,7 @@ const toTitleCase = (value: string) =>
 export default function PlayPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { promptHandle, refresh, user } = useUser();
   const [activeTab, setActiveTab] = useState<"domain" | "game">("domain");
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [game, setGame] = useState<GameState | null>(null);
@@ -80,6 +100,10 @@ export default function PlayPage() {
   const [isHydrating, setIsHydrating] = useState(true);
   const [hydrationError, setHydrationError] = useState<string | null>(null);
   const [flashingLetter, setFlashingLetter] = useState<string | null>(null);
+  const { play: playCorrect } = useSound("/sfx/correct-guess.mp3");
+  const { play: playWrong } = useSound("/sfx/wrong-guess.mp3");
+  const { play: playWin } = useSound("/sfx/win.mp3", { volume: 0.85 });
+  const { play: playLoss } = useSound("/sfx/loss.mp3", { volume: 0.9 });
 
   const domainEntries = useMemo(
     () => Object.entries(domains) as [string, { hint: string; words: string[] } ][],
@@ -116,20 +140,67 @@ export default function PlayPage() {
   const handleGameFinished = useCallback(
     (state: GameState) => {
       window.localStorage.removeItem(STORAGE_KEY);
-      const title = state.status === "won" ? TOAST_COPY.win : TOAST_COPY.loss;
+      const title = state.status === "won" ? COPY.result.title.win : COPY.result.title.loss;
       const scoreSnippet =
         typeof state.score_delta === "number"
           ? ` Score change: ${state.score_delta >= 0 ? "+" : ""}${state.score_delta}.`
           : "";
-      const description =
+      const baseDescription =
         state.status === "won"
-          ? `The gallows crew packs up in disappointment.${scoreSnippet}`
-          : `Reset the rope, wipe the tears, and try again.${scoreSnippet}`;
+          ? COPY.result.winDescription
+          : COPY.result.lossDescription;
+      const description = `${baseDescription}${scoreSnippet}`;
+
+      if (state.status === "won") {
+        playWin();
+      } else if (state.status === "lost") {
+        playLoss();
+      }
+      logEvent({
+        event: state.status === "won" ? "game_win" : "game_loss",
+        userId: state.userId,
+        metadata: {
+          game_id: state.gameId,
+          domain: state.domain,
+          wrong_guesses: state.wrong_guesses_count,
+          score_delta: state.score_delta ?? undefined,
+          score_total: state.score_total ?? undefined,
+          rank: state.rank ?? undefined,
+          throttled: state.throttled ?? false,
+        },
+      });
 
       toast({
         title,
         description,
       });
+
+      if (state.throttled) {
+        toast({
+          title: "Slow down, hero.",
+          description: "This finish didn’t count toward the leaderboard.",
+          variant: "destructive",
+        });
+      }
+
+      if (state.requiresHandle) {
+        toast({
+          title: "Claim your handle",
+          description: "Set a handle so we can crown you on the leaderboard.",
+        });
+        promptHandle();
+      }
+
+      if (state.achievements && state.achievements.length > 0) {
+        state.achievements.forEach((achievement) => {
+          toast({
+            title: achievement.title,
+            description: achievement.description,
+          });
+        });
+        confetti({ particleCount: 120, spread: 70, origin: { y: 0.7 } });
+        refresh().catch(() => null);
+      }
 
       const searchParams = new URLSearchParams({
         status: state.status,
@@ -137,9 +208,25 @@ export default function PlayPage() {
         domain: state.domain,
       });
 
+      if (typeof state.score_delta === "number") {
+        searchParams.set("scoreDelta", String(state.score_delta));
+      }
+      if (typeof state.score_total === "number") {
+        searchParams.set("scoreTotal", String(state.score_total));
+      }
+      if (typeof state.rank === "number") {
+        searchParams.set("rank", String(state.rank));
+      }
+      if (state.word_answer) {
+        searchParams.set("word", state.word_answer);
+      }
+      if (state.throttled) {
+        searchParams.set("throttled", "true");
+      }
+
       router.push(`/result?${searchParams.toString()}`);
     },
-    [router, toast],
+    [playLoss, playWin, promptHandle, refresh, router, toast],
   );
 
   const syncLocalStorage = useCallback((state: GameState | null) => {
@@ -165,12 +252,23 @@ export default function PlayPage() {
         setPendingDomain(domainKey);
         setSelectedDomain(domainKey);
 
+        const pool =
+          (domains as Record<string, { words: string[] }>)[domainKey]?.words ?? [];
+        let chosenWord: string | undefined;
+        if (pool.length > 0) {
+          const selectorUser = game?.userId ?? user?.userId ?? "anon";
+          chosenWord = selectWordForDomain(domainKey, pool, selectorUser);
+        }
+
         const response = await fetch("/api/new-game", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ domain: domainKey }),
+          body: JSON.stringify({
+            domain: domainKey,
+            word: chosenWord,
+          }),
         });
 
         if (!response.ok) {
@@ -190,12 +288,28 @@ export default function PlayPage() {
           wrong_letters: payload.wrong_letters,
           finished_at: payload.finished_at ?? null,
           score_delta: null,
+          score_total: null,
+          rank: null,
+          throttled: false,
+          requiresHandle: false,
+          achievements: [],
         };
 
         setGame(nextState);
         setActiveTab("game");
         setSelectedDomain(payload.domain ?? domainKey);
         syncLocalStorage(nextState);
+        if (nextState.userId) {
+          setAnalyticsUserId(nextState.userId);
+        }
+        logEvent({
+          event: "game_start",
+          userId: nextState.userId,
+          metadata: {
+            domain: nextState.domain,
+            game_id: nextState.gameId,
+          },
+        });
 
         toast({
           title: "Majnu approaches the gallows.",
@@ -214,7 +328,7 @@ export default function PlayPage() {
         setPendingDomain(null);
       }
     },
-    [isStarting, syncLocalStorage, toast],
+    [game, isStarting, syncLocalStorage, toast, user],
   );
 
   const applyGuessResult = useCallback(
@@ -231,11 +345,20 @@ export default function PlayPage() {
         wrong_letters: payload.wrong_letters,
         finished_at: payload.finished_at ?? null,
         score_delta: payload.score_delta ?? null,
+        score_total: payload.score_total ?? game?.score_total ?? null,
+        rank: payload.rank ?? game?.rank ?? null,
+        throttled: payload.throttled ?? false,
+        word_answer: payload.word_answer ?? game?.word_answer,
+        requiresHandle: payload.requires_handle ?? false,
+        achievements: payload.achievements ?? [],
       };
 
       setGame(nextState);
       setSelectedDomain(nextState.domain);
       syncLocalStorage(nextState);
+      if (nextState.userId) {
+        setAnalyticsUserId(nextState.userId);
+      }
       if (nextState.status !== "active") {
         handleGameFinished(nextState);
       }
@@ -252,8 +375,8 @@ export default function PlayPage() {
 
       if (guessedLetterSet.has(normalized)) {
         toast({
-          title: "Already tried",
-          description: `"${letter.toUpperCase()}" has been guessed.`,
+          title: COPY.game.toasts.repeat,
+          description: `"${letter.toUpperCase()}" has already been tried.`,
         });
         return;
       }
@@ -277,23 +400,25 @@ export default function PlayPage() {
 
         if (payload.isRepeat) {
           toast({
-            title: TOAST_COPY.repeat,
+            title: COPY.game.toasts.repeat,
             description: `Letter ${letter.toUpperCase()} was a wasted breath.`,
           });
           return;
         }
 
         if (payload.isCorrect) {
+          playCorrect();
           toast({
-            title: TOAST_COPY.correct,
+            title: COPY.game.toasts.correct,
             description: `Letter ${letter.toUpperCase()} bought Majnu a heartbeat.`,
           });
         } else {
+          playWrong();
           const isLastChance =
             payload.wrong_guesses_count === MAX_WRONG_GUESSES - 1;
           setFlashingLetter(normalized);
           toast({
-            title: isLastChance ? TOAST_COPY.lastChance : TOAST_COPY.wrong,
+            title: isLastChance ? COPY.game.toasts.lastChance : COPY.game.toasts.wrong,
             description: isLastChance
               ? "One more mistake and the rope snaps tight."
               : `Letter ${letter.toUpperCase()} tightened the knot.`,
@@ -314,7 +439,7 @@ export default function PlayPage() {
         setIsGuessing(false);
       }
     },
-    [applyGuessResult, game, guessedLetterSet, isGuessing, toast],
+    [applyGuessResult, game, guessedLetterSet, isGuessing, playCorrect, playWrong, toast],
   );
 
   const handleGiveUp = useCallback(async () => {
@@ -380,6 +505,9 @@ export default function PlayPage() {
       setSelectedDomain(payload.domain);
       setActiveTab("game");
       syncLocalStorage(payload);
+      if (payload.userId) {
+        setAnalyticsUserId(payload.userId);
+      }
 
       if (payload.status !== "active") {
         handleGameFinished(payload);
@@ -453,14 +581,24 @@ export default function PlayPage() {
       return null;
     }
 
-    return game.masked.split("").map((char, index) => (
-      <span
-        key={`${char}-${index}`}
-        className="flex h-12 w-12 items-center justify-center rounded-md border-2 border-dashed border-red/30 bg-white text-2xl font-semibold uppercase shadow-[0_4px_0_rgba(192,57,43,0.35)]"
-      >
-        {char === "_" ? "" : char}
-      </span>
-    ));
+    return game.masked.split("").map((char, index) => {
+      const display = char === "_" ? "" : char;
+      return (
+        <motion.span
+          key={`${index}-${char}`}
+          initial={{ scale: display ? 0.6 : 0.9, opacity: 0 }}
+          animate={
+            display
+              ? { scale: [1.1, 0.95, 1], opacity: 1 }
+              : { scale: 1, opacity: 1 }
+          }
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="flex h-12 w-12 items-center justify-center rounded-md border-2 border-dashed border-red/30 bg-white text-2xl font-semibold uppercase shadow-[0_4px_0_rgba(192,57,43,0.35)]"
+        >
+          {display}
+        </motion.span>
+      );
+    });
   }, [game]);
 
   const hearts = useMemo(() => {
@@ -511,7 +649,12 @@ export default function PlayPage() {
   }, [game]);
 
   return (
-    <div className="container max-w-5xl py-10 text-foreground">
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.45, ease: "easeOut" }}
+      className="container max-w-5xl py-10 text-foreground"
+    >
       <Tabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as "domain" | "game")}
@@ -620,7 +763,7 @@ export default function PlayPage() {
                           <div className="flex items-center justify-between rounded-lg border border-dashed border-red/30 bg-white/60 px-4 py-3 text-sm font-semibold text-red">
                             <span className="flex items-center gap-2">
                               <span aria-hidden>💀</span>
-                              Wrong guesses: {game.wrong_guesses_count} / {MAX_WRONG_GUESSES}
+                              {COPY.game.wrongBar(game.wrong_guesses_count, MAX_WRONG_GUESSES)}
                             </span>
                             {hearts}
                           </div>
@@ -632,9 +775,17 @@ export default function PlayPage() {
                     </TooltipProvider>
 
                     {game && (
-                      <div className="flex flex-wrap items-center justify-center gap-3">
-                        <div className="rounded-lg border border-red/20 bg-mustard px-4 py-2 text-sm font-semibold text-foreground shadow-[2px_4px_0_rgba(192,57,43,0.2)]">
-                          Hint: {game.hint}
+                      <div className="flex justify-center">
+                        <div
+                          className={cn(
+                            "relative w-full max-w-xl rounded-2xl border border-red/20 bg-[#FFF4C4] px-5 py-4 text-left shadow-[0_12px_30px_-18px_rgba(192,57,43,0.45)]",
+                            isStarting && "animate-pulse",
+                          )}
+                        >
+                          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-red/70">
+                            {COPY.game.hintLabel(game.hint)}
+                          </p>
+                          <span className="absolute -top-3 left-8 h-6 w-12 rounded-full bg-[#FADB82] opacity-70 blur-[2px]" />
                         </div>
                       </div>
                     )}
@@ -647,40 +798,57 @@ export default function PlayPage() {
                       {LETTERS.map((letter) => {
                         const normalized = letter.toLowerCase();
                         const isSelected = guessedLetterSet.has(normalized);
+                        const isFlashing = flashingLetter === normalized;
                         return (
-                          <Button
+                          <motion.div
                             key={letter}
-                            variant="outline"
-                            disabled={
-                              isSelected ||
-                              game.status !== "active" ||
-                              isGuessing
+                            animate={
+                              isFlashing
+                                ? { x: [0, -4, 4, -4, 4, 0], rotate: [0, -2, 2, -2, 2, 0] }
+                                : { x: 0, rotate: 0 }
                             }
-                            aria-pressed={isSelected}
-                            onClick={() => handleGuess(letter)}
-                            className={cn(
-                              "h-10 w-10 p-0 text-sm font-semibold uppercase transition-colors",
-                              isSelected && "bg-red/20 text-red border-red/40",
-                              flashingLetter === normalized &&
-                                "border-red bg-red text-beige animate-pulse"
-                            )}
+                            transition={{ duration: 0.4, ease: "easeOut" }}
                           >
-                            {letter}
-                          </Button>
+                            <Button
+                              variant="outline"
+                              disabled={
+                                isSelected ||
+                                game.status !== "active" ||
+                                isGuessing
+                              }
+                              aria-pressed={isSelected}
+                              onClick={() => handleGuess(letter)}
+                              className={cn(
+                                "h-10 w-10 p-0 text-sm font-semibold uppercase transition-colors",
+                                isSelected && "bg-red/20 text-red border-red/40",
+                                isFlashing && "border-red bg-red text-beige"
+                              )}
+                            >
+                              {letter}
+                            </Button>
+                          </motion.div>
                         );
                       })}
                     </div>
                   </div>
 
                   <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-red/30 bg-beige/80 p-4 shadow-[0_20px_40px_-20px_rgba(192,57,43,0.45)]">
-                    <Image
-                      src={currentFrame}
-                      alt="Majnu Bhai execution state"
-                      width={260}
-                      height={260}
-                      className="h-auto w-full max-w-[260px] rounded-md border border-red/30 bg-beige object-contain shadow-[0_15px_30px_-10px_rgba(0,0,0,0.25)]"
-                      priority
-                    />
+                    <motion.div
+                      key={currentFrame}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.45, ease: "easeOut" }}
+                      className="w-full"
+                    >
+                      <Image
+                        src={currentFrame}
+                        alt="Majnu Bhai execution state"
+                        width={260}
+                        height={260}
+                        className="h-auto w-full max-w-[260px] rounded-md border border-red/30 bg-beige object-contain shadow-[0_15px_30px_-10px_rgba(0,0,0,0.25)]"
+                        priority
+                      />
+                    </motion.div>
                     <Button
                       variant="destructive"
                       onClick={handleGiveUp}
@@ -704,6 +872,6 @@ export default function PlayPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </motion.div>
   );
 }

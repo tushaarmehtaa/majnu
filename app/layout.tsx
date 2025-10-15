@@ -3,7 +3,10 @@ import { Bebas_Neue, Geist, Geist_Mono, Inter, Shrikhand } from "next/font/googl
 import "./globals.css";
 import type { Metadata } from "next";
 
+import { SoundProvider } from "@/components/sound/sound-provider";
+import { SoundToggle } from "@/components/sound/sound-toggle";
 import { Toaster } from "@/components/ui/toaster";
+import { UserProvider } from "@/context/user-context";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,10 +35,37 @@ const shrikhand = Shrikhand({
   subsets: ["latin"],
 });
 
+const siteUrl = "https://savemajnu.live";
+const title = "Save Majnu Bhai";
+const description =
+  "Bollywood gallows humor. Guess the word in five mistakes or Majnu Bhai swings.";
+
 export const metadata: Metadata = {
-  title: "Save Majnu Bhai",
-  description:
-    "Bollywood gallows humor. Guess the word in five mistakes or Majnu Bhai swings.",
+  metadataBase: new URL(siteUrl),
+  title,
+  description,
+  openGraph: {
+    title,
+    description,
+    url: siteUrl,
+    siteName: title,
+    images: [
+      {
+        url: "/og/win.png",
+        width: 1200,
+        height: 630,
+        alt: "Majnu Bhai survives the rope.",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+    images: ["/og/win.png"],
+  },
 };
 
 export default function RootLayout({
@@ -48,25 +78,30 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${bebas.variable} ${shrikhand.variable} antialiased`}
       >
-        <div className="min-h-screen bg-background text-foreground">
-          <header className="sticky top-0 z-40 border-b border-red/20 bg-background/90 backdrop-blur">
-            <nav className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4">
-              <Link href="/" className="font-display text-2xl uppercase tracking-[0.3em] text-red">
-                Save Majnu Bhai
-              </Link>
-              <div className="flex items-center gap-4 text-sm font-medium">
-                <Link href="/play" className="hover:text-red">
-                  Play
-                </Link>
-                <Link href="/leaderboard" className="hover:text-red">
-                  Leaderboard
-                </Link>
-              </div>
-            </nav>
-          </header>
-          <main>{children}</main>
-          <Toaster />
-        </div>
+        <SoundProvider>
+          <UserProvider>
+            <div className="min-h-screen bg-gradient-to-br from-[#FDF7E4] via-[#FFF9E0] to-[#FFF1CC] text-foreground">
+              <header className="sticky top-0 z-40 border-b border-red/10 bg-white/70 backdrop-blur">
+                <nav className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4">
+                  <Link href="/" className="font-display text-2xl uppercase tracking-[0.3em] text-red">
+                    Save Majnu Bhai
+                  </Link>
+                  <div className="flex items-center gap-4 text-sm font-medium">
+                    <Link href="/play" className="hover:text-red">
+                      Play
+                    </Link>
+                    <Link href="/leaderboard" className="hover:text-red">
+                      Leaderboard
+                    </Link>
+                    <SoundToggle />
+                  </div>
+                </nav>
+              </header>
+              <main>{children}</main>
+              <Toaster />
+            </div>
+          </UserProvider>
+        </SoundProvider>
       </body>
     </html>
   );

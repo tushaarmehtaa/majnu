@@ -1,26 +1,102 @@
 {
+  "bollywood": {
+    "hint": "Iconic scenes and cult gangsters",
+    "words": [
+      "heraferi",
+      "munnabhai",
+      "andazapna",
+      "lagaan",
+      "dostana",
+      "chakde",
+      "sholay",
+      "gullyboy",
+      "gangsofwasseypur",
+      "golmaal",
+      "drishyam",
+      "zindagi",
+      "swades",
+      "pinkvilla",
+      "kaalia"
+    ]
+  },
+  "startups": {
+    "hint": "Pitch decks, moats, and burn",
+    "words": [
+      "saas",
+      "moat",
+      "burnrate",
+      "runway",
+      "churn",
+      "seedround",
+      "termsheet",
+      "dilution",
+      "captable",
+      "productmarketfit",
+      "growthloop",
+      "viralcoef",
+      "northstar",
+      "pivot",
+      "onboarding"
+    ]
+  },
+  "web": {
+    "hint": "Front-end terms and layout quirks",
+    "words": [
+      "flexbox",
+      "grid",
+      "state",
+      "viewport",
+      "hydration",
+      "tailwind",
+      "router",
+      "serviceworker",
+      "bundle",
+      "sourcemap",
+      "render",
+      "csr",
+      "ssr",
+      "websocket",
+      "component"
+    ]
+  },
+  "crypto": {
+    "hint": "Onchain slang and protocol jargon",
+    "words": [
+      "layer2",
+      "airdrop",
+      "gasfee",
+      "staking",
+      "ledger",
+      "bridge",
+      "defi",
+      "mint",
+      "hotwallet",
+      "coldstorage",
+      "rollup",
+      "dao",
+      "yield",
+      "slippage",
+      "faucet"
+    ]
+  },
   "fitness": {
-    "hint": "gym and training words",
-    "words": ["deadlift","squat","lunge","pushups","plank","cardio","protein","creatine","tabata","yoga","mobility","recovery","sprinting","running","benchpress","dumbbell","burpees","warmup","cooldown","stretch"]
-  },
-  "ai": {
-    "hint": "ml and ai terms",
-    "words": ["dataset","tensor","encoder","decoder","attention","logits","dropout","overfit","epoch","prompt","vector","retriever","indexing","gradient","lossfunc","regularize","scaling","latency","caching","embedding"]
-  },
-  "cinema": {
-    "hint": "films and set slang",
-    "words": ["bollywood","screenplay","director","interval","cameo","trailer","remake","sequel","khiladi","masala","dialogue","villain","heroine","montage","credits","climax","songbook","blockbuster","artfilm","biopic"]
-  },
-  "food": {
-    "hint": "indian food names",
-    "words": ["biryani","dosa","idli","paratha","chaat","samosa","paneer","chutney","poha","upma","kebab","pavbhaji","rajma","chole","jalebi","lassi","poori","khichdi","halwa","rasgulla"]
-  },
-  "sports": {
-    "hint": "games and play terms",
-    "words": ["cricket","tennis","football","kabaddi","hockey","badminton","marathon","sprint","boxing","wrestling","judothrow","offside","wicket","goalie","racket","dribble","freekick","volley","umpire","innings"]
-  },
-  "books": {
-    "hint": "book and parts",
-    "words": ["novel","memoir","fiction","nonfiction","epilogue","prologue","chapter","author","preface","indexpage","glossary","footnote","hardcover","paperback","bookmark","library","dystopia","fantasy","mystery","atlas"]
+    "hint": "Training protocols and gym moves",
+    "words": [
+      "emom",
+      "amrap",
+      "deadlift",
+      "tabata",
+      "superset",
+      "foamroll",
+      "burpee",
+      "lunge",
+      "deload",
+      "plyo",
+      "corework",
+      "interval",
+      "tempo",
+      "warmup",
+      "cooldown"
+    ]
   }
 }

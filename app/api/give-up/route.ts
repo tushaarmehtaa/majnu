@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { MAX_WRONG_GUESSES } from "@/lib/game";
-import { getGameById, now, onGameFinish, updateGame } from "@/lib/instantdb";
+import { getGameById, getUserRank, now, onGameFinish, updateGame } from "@/lib/instantdb";
 
 type GiveUpPayload = {
   gameId?: string;
@@ -34,6 +34,7 @@ export async function POST(request: Request) {
   });
 
   const result = await onGameFinish(updated.id, "loss", updated.user_id);
+  const rank = await getUserRank("weekly", updated.user_id);
 
   return NextResponse.json({
     status: updated.status,
@@ -44,5 +45,11 @@ export async function POST(request: Request) {
     hint: updated.hint,
     userId: updated.user_id,
     score_delta: result.scoreDelta,
+    score_total: result.stats.score_total,
+    throttled: result.throttled,
+    rank,
+    word_answer: updated.word_answer,
+    requires_handle: result.requiresHandle,
+    achievements: result.achievements,
   });
 }

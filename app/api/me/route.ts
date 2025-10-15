@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { getOrCreateAnonymousUser, getUserStats } from "@/lib/instantdb";
+import { getAchievements, getOrCreateAnonymousUser, getUserStats } from "@/lib/instantdb";
 
 const USER_COOKIE = "majnu-user-id";
 
@@ -17,7 +17,10 @@ export async function GET() {
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
   });
 
-  const stats = await getUserStats(user.id);
+  const [stats, achievements] = await Promise.all([
+    getUserStats(user.id),
+    getAchievements(user.id),
+  ]);
 
   return NextResponse.json({
     userId: user.id,
@@ -27,5 +30,6 @@ export async function GET() {
     streak_current: stats.streak_current,
     streak_best: stats.streak_best,
     score_total: stats.score_total,
+    achievements,
   });
 }

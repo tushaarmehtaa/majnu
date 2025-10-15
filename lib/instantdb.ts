@@ -49,9 +49,50 @@ export type LeaderboardRecord = {
   updated_at: string;
 };
 
+export type LeaderboardListItem = LeaderboardEntry & {
+  cursor: string;
+  badges: string[];
+  updated_at: string;
+};
+
+export type LeaderboardPage = {
+  items: LeaderboardListItem[];
+  userEntry: LeaderboardListItem | null;
+  nextCursor?: string;
+  total: number;
+  summary: {
+    wins: number;
+    losses: number;
+    games: number;
+  };
+};
+
 type RateBucket = {
   windowStart: number;
   count: number;
+};
+
+export type HintRecord = {
+  id: string;
+  domain: string;
+  word: string;
+  hint: string;
+  created_at: string;
+};
+
+export type AchievementRecord = {
+  id: string;
+  user_id: string;
+  key: string;
+  title: string;
+  description: string;
+  unlocked_at: string;
+};
+
+export type ShortLinkRecord = {
+  id: string;
+  target: string;
+  created_at: string;
 };
 
 type InMemoryInstantDB = {
@@ -61,6 +102,11 @@ type InMemoryInstantDB = {
   leaderboardsDaily: Map<string, LeaderboardRecord>;
   leaderboardsWeekly: Map<string, LeaderboardRecord>;
   guessBuckets: Map<string, RateBucket>;
+  finishBuckets: Map<string, RateBucket>;
+  hints: Map<string, HintRecord>;
+  handles: Map<string, string>;
+  achievements: Map<string, AchievementRecord>;
+  shortLinks: Map<string, ShortLinkRecord>;
 };
 
 declare global {
@@ -80,6 +126,11 @@ function createStore(): InMemoryInstantDB {
       leaderboardsDaily: new Map<string, LeaderboardRecord>(),
       leaderboardsWeekly: new Map<string, LeaderboardRecord>(),
       guessBuckets: new Map<string, RateBucket>(),
+      finishBuckets: new Map<string, RateBucket>(),
+      hints: new Map<string, HintRecord>(),
+      handles: new Map<string, string>(),
+      achievements: new Map<string, AchievementRecord>(),
+      shortLinks: new Map<string, ShortLinkRecord>(),
     };
   }
 
@@ -92,6 +143,9 @@ export async function getOrCreateAnonymousUser(id?: string): Promise<UserRecord>
   if (id) {
     const user = store.users.get(id);
     if (user) {
+      if (user.handle) {
+        store.handles.set(user.handle.toLowerCase(), user.id);
+      }
       return user;
     }
   }
@@ -106,6 +160,50 @@ export async function getOrCreateAnonymousUser(id?: string): Promise<UserRecord>
 
   store.users.set(userId, record);
   return record;
+}
+
+export async function getUserById(id: string): Promise<UserRecord | undefined> {
+  return store.users.get(id);
+}
+
+function normaliseHandle(handle: string): string {
+  return handle.trim().toLowerCase();
+}
+
+export async function isHandleAvailable(handle: string, userId?: string): Promise<boolean> {
+  const normalized = normaliseHandle(handle);
+  const existingOwner = store.handles.get(normalized);
+  if (!existingOwner) {
+    return true;
+  }
+  return existingOwner === userId;
+}
+
+export async function setUserHandle(userId: string, handle: string): Promise<UserRecord> {
+  const user = store.users.get(userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const sanitized = handle.replace(/^@/, "").trim();
+  if (sanitized.length === 0) {
+    throw new Error("Handle cannot be empty");
+  }
+
+  if (user.handle && user.handle.toLowerCase() !== sanitized.toLowerCase()) {
+    throw new Error("Handle already set");
+  }
+
+  const normalized = normaliseHandle(sanitized);
+  const existingOwner = store.handles.get(normalized);
+  if (existingOwner && existingOwner !== userId) {
+    throw new Error("Handle already taken");
+  }
+
+  user.handle = sanitized;
+  store.users.set(userId, user);
+  store.handles.set(normalized, userId);
+  return user;
 }
 
 export async function getGameById(id: string): Promise<GameRecord | undefined> {
@@ -180,6 +278,110 @@ export async function listGamesByUser(userId: string): Promise<GameRecord[]> {
   return Array.from(store.games.values()).filter((game) => game.user_id === userId);
 }
 
+function hintKey(domain: string, word: string): string {
+  return `${domain.toLowerCase()}::${word.toLowerCase()}`;
+}
+
+export async function getCachedHint(
+  domain: string,
+  word: string,
+): Promise<HintRecord | undefined> {
+  return store.hints.get(hintKey(domain, word));
+}
+
+export async function saveHint(
+  domain: string,
+  word: string,
+  hint: string,
+): Promise<HintRecord> {
+  const id = hintKey(domain, word);
+  const record: HintRecord = {
+    id,
+    domain,
+    word,
+    hint,
+    created_at: now(),
+  };
+  store.hints.set(id, record);
+  return record;
+}
+
+const ACHIEVEMENT_DEFINITIONS: Record<string, { title: string; description: string; predicate: (context: { result: GameResult; stats: UserStatsRecord; streakBefore: number }) => boolean }> = {
+  first_win: {
+    title: "First Blood",
+    description: "You saved Majnu for the first time.",
+    predicate: ({ result, stats }) => result === "win" && stats.wins_all === 1,
+  },
+  first_loss: {
+    title: "Too Slow",
+    description: "Your first loss. The don is displeased.",
+    predicate: ({ result, stats }) => result === "loss" && stats.losses_all === 1,
+  },
+  hot_streak: {
+    title: "Hot Streak",
+    description: "Five wins in a row. Rope dodged!",
+    predicate: ({ result, stats, streakBefore }) => result === "win" && streakBefore >= 4 && stats.streak_current >= 5,
+  },
+};
+
+function achievementKey(userId: string, key: string): string {
+  return `${userId}:${key}`;
+}
+
+export async function getAchievements(userId: string): Promise<AchievementRecord[]> {
+  return Array.from(store.achievements.values()).filter((record) => record.user_id === userId);
+}
+
+async function unlockAchievements(
+  userId: string,
+  context: { result: GameResult; stats: UserStatsRecord; streakBefore: number },
+): Promise<AchievementRecord[]> {
+  const unlocked: AchievementRecord[] = [];
+  for (const [key, definition] of Object.entries(ACHIEVEMENT_DEFINITIONS)) {
+    const alreadyUnlocked = store.achievements.get(achievementKey(userId, key));
+    if (alreadyUnlocked) continue;
+    if (!definition.predicate(context)) continue;
+    const record: AchievementRecord = {
+      id: randomUUID(),
+      user_id: userId,
+      key,
+      title: definition.title,
+      description: definition.description,
+      unlocked_at: now(),
+    };
+    store.achievements.set(achievementKey(userId, key), record);
+    unlocked.push(record);
+  }
+  return unlocked;
+}
+
+function generateShortId(length = 6): string {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
+  for (let i = 0; i < length; i += 1) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+export async function createShortLink(target: string): Promise<ShortLinkRecord> {
+  let id = generateShortId();
+  while (store.shortLinks.has(id)) {
+    id = generateShortId();
+  }
+  const record: ShortLinkRecord = {
+    id,
+    target,
+    created_at: now(),
+  };
+  store.shortLinks.set(id, record);
+  return record;
+}
+
+export async function getShortLink(id: string): Promise<ShortLinkRecord | undefined> {
+  return store.shortLinks.get(id);
+}
+
 function getOrCreateUserStats(userId: string): UserStatsRecord {
   let stats = store.userStats.get(userId);
   if (!stats) {
@@ -235,6 +437,9 @@ function upsertLeaderboard(
 export type OnGameFinishResult = {
   scoreDelta: number;
   stats: UserStatsRecord;
+  throttled: boolean;
+  requiresHandle: boolean;
+  achievements: AchievementRecord[];
 };
 
 export async function onGameFinish(
@@ -251,11 +456,37 @@ export async function onGameFinish(
     return {
       scoreDelta: 0,
       stats: getOrCreateUserStats(userId),
+      throttled: false,
+      requiresHandle: false,
+      achievements: [],
     };
   }
 
   const stats = getOrCreateUserStats(userId);
   const streakBefore = stats.streak_current;
+  const user = await getUserById(userId);
+  if (!user) {
+    throw new Error("User missing during finish");
+  }
+
+  const missingHandle = !user.handle;
+  const isAllowed = missingHandle ? true : registerFinish(userId);
+
+  if (!isAllowed) {
+    await updateGame(gameId, {
+      scored: true,
+      result,
+      finished_at: game.finished_at ?? now(),
+    });
+    return {
+      scoreDelta: 0,
+      stats,
+      throttled: true,
+      requiresHandle: false,
+      achievements: [],
+    };
+  }
+
   const delta = scoreDelta(result, streakBefore);
 
   if (result === "win") {
@@ -274,25 +505,27 @@ export async function onGameFinish(
   const dailyKey = dateKey(scopeDate);
   const weeklyKey = weekKey(scopeDate);
 
-  upsertLeaderboard("daily", dailyKey, userId, (record) => {
-    if (result === "win") {
-      record.wins += 1;
-    } else {
-      record.losses += 1;
-    }
-    record.score += delta;
-    record.streak_best = Math.max(record.streak_best, stats.streak_current, stats.streak_best);
-  });
+  if (!missingHandle) {
+    upsertLeaderboard("daily", dailyKey, userId, (record) => {
+      if (result === "win") {
+        record.wins += 1;
+      } else {
+        record.losses += 1;
+      }
+      record.score += delta;
+      record.streak_best = Math.max(record.streak_best, stats.streak_current, stats.streak_best);
+    });
 
-  upsertLeaderboard("weekly", weeklyKey, userId, (record) => {
-    if (result === "win") {
-      record.wins += 1;
-    } else {
-      record.losses += 1;
-    }
-    record.score += delta;
-    record.streak_best = Math.max(record.streak_best, stats.streak_current, stats.streak_best);
-  });
+    upsertLeaderboard("weekly", weeklyKey, userId, (record) => {
+      if (result === "win") {
+        record.wins += 1;
+      } else {
+        record.losses += 1;
+      }
+      record.score += delta;
+      record.streak_best = Math.max(record.streak_best, stats.streak_current, stats.streak_best);
+    });
+  }
 
   await updateGame(gameId, {
     scored: true,
@@ -300,7 +533,19 @@ export async function onGameFinish(
     finished_at: game.finished_at ?? now(),
   });
 
-  return { scoreDelta: delta, stats };
+  const achievements = await unlockAchievements(userId, {
+    result,
+    stats,
+    streakBefore,
+  });
+
+  return {
+    scoreDelta: delta,
+    stats,
+    throttled: false,
+    requiresHandle: missingHandle,
+    achievements,
+  };
 }
 
 export async function getUserStats(userId: string): Promise<UserStatsRecord> {
@@ -322,54 +567,127 @@ function sortLeaderboard(records: LeaderboardRecord[]): LeaderboardRecord[] {
     .slice()
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
-      if (b.wins !== a.wins) return b.wins - a.wins;
-      if (a.losses !== b.losses) return a.losses - b.losses;
+      if (b.streak_best !== a.streak_best) return b.streak_best - a.streak_best;
       return a.updated_at.localeCompare(b.updated_at);
     });
+}
+
+function recentResults(userId: string, limit = 3): GameResult[] {
+  return Array.from(store.games.values())
+    .filter((game) => game.user_id === userId && game.result && game.finished_at)
+    .sort((a, b) => (b.finished_at ?? "").localeCompare(a.finished_at ?? ""))
+    .slice(0, limit)
+    .map((game) => game.result as GameResult);
+}
+
+function computeBadges(userId: string, stats: UserStatsRecord): string[] {
+  const badges: string[] = [];
+  if (stats.streak_current >= 5) {
+    badges.push("Hot Streak");
+  }
+
+  const results = recentResults(userId, 3);
+  if (
+    results.length === 3 &&
+    results[0] === "win" &&
+    results[1] === "win" &&
+    results[2] === "loss"
+  ) {
+    badges.push("Comeback");
+  }
+
+  return badges;
+}
+
+function formatLeaderboardItem(
+  record: LeaderboardRecord,
+  rank: number,
+): LeaderboardListItem {
+  const user = store.users.get(record.user_id);
+  const stats = getOrCreateUserStats(record.user_id);
+  const badges = computeBadges(record.user_id, stats);
+
+  return {
+    cursor: record.id,
+    user_id: record.user_id,
+    handle: user?.handle ?? null,
+    wins: record.wins,
+    losses: record.losses,
+    score: record.score,
+    streak_best: record.streak_best,
+    rank,
+    badges,
+    updated_at: record.updated_at,
+  };
 }
 
 export async function getLeaderboard(
   scope: "daily" | "weekly",
   limit: number,
   userId: string,
-  date: Date = new Date(),
-): Promise<{ entries: LeaderboardEntry[]; userEntry: LeaderboardEntry | null }>
-{
+  options: { cursor?: string; date?: Date } = {},
+): Promise<LeaderboardPage> {
+  const { cursor, date = new Date() } = options;
   const scopeKey = scope === "daily" ? dateKey(date) : weekKey(date);
   const map = getLeaderboardMap(scope);
   const relevant = Array.from(map.values()).filter((record) => record.scope_key === scopeKey);
   const sorted = sortLeaderboard(relevant);
+  const total = sorted.length;
+  const totals = sorted.reduce(
+    (acc, record) => {
+      acc.wins += record.wins;
+      acc.losses += record.losses;
+      return acc;
+    },
+    { wins: 0, losses: 0 },
+  );
 
-  const entries = sorted.slice(0, limit).map((record, index) => {
-    const user = store.users.get(record.user_id);
-    return {
-      user_id: record.user_id,
-      handle: user?.handle ?? null,
-      wins: record.wins,
-      losses: record.losses,
-      score: record.score,
-      streak_best: record.streak_best,
-      rank: index + 1,
-    };
-  });
-
-  let userEntry: LeaderboardEntry | null = null;
-  const userIndex = sorted.findIndex((record) => record.user_id === userId);
-  if (userIndex >= 0) {
-    const record = sorted[userIndex];
-    const user = store.users.get(record.user_id);
-    userEntry = {
-      user_id: record.user_id,
-      handle: user?.handle ?? null,
-      wins: record.wins,
-      losses: record.losses,
-      score: record.score,
-      streak_best: record.streak_best,
-      rank: userIndex + 1,
-    };
+  let startIndex = 0;
+  if (cursor) {
+    const cursorIndex = sorted.findIndex((record) => record.id === cursor);
+    if (cursorIndex >= 0) {
+      startIndex = cursorIndex + 1;
+    }
   }
 
-  return { entries, userEntry };
+  const slice = sorted.slice(startIndex, startIndex + limit);
+  const items = slice.map((record, index) =>
+    formatLeaderboardItem(record, startIndex + index + 1),
+  );
+
+  const nextRecord = sorted[startIndex + limit];
+  const nextCursor = nextRecord ? nextRecord.id : undefined;
+
+  let userEntry: LeaderboardListItem | null = null;
+  const userIndex = sorted.findIndex((record) => record.user_id === userId);
+  if (userIndex >= 0) {
+    userEntry = formatLeaderboardItem(sorted[userIndex], userIndex + 1);
+  }
+
+  return {
+    items,
+    userEntry,
+    nextCursor,
+    total,
+    summary: {
+      wins: totals.wins,
+      losses: totals.losses,
+      games: totals.wins + totals.losses,
+    },
+  };
+}
+
+export async function getUserRank(
+  scope: "daily" | "weekly",
+  userId: string,
+  date: Date = new Date(),
+): Promise<number | null> {
+  const scopeKey = scope === "daily" ? dateKey(date) : weekKey(date);
+  const map = getLeaderboardMap(scope);
+  const relevant = Array.from(map.values()).filter((record) => record.scope_key === scopeKey);
+  const sorted = sortLeaderboard(relevant);
+  const index = sorted.findIndex((record) => record.user_id === userId);
+  return index >= 0 ? index + 1 : null;
 }
 
 const RATE_LIMIT_PER_MINUTE = 60;
@@ -399,5 +717,30 @@ export function checkGuessRate(userId: string): boolean {
 
   bucket.count += 1;
   store.guessBuckets.set(userId, bucket);
+  return true;
+}
+
+const FINISH_LIMIT_PER_MINUTE = 8;
+
+function registerFinish(userId: string): boolean {
+  const nowTs = Date.now();
+  const windowMs = 60 * 1000;
+  let bucket = store.finishBuckets.get(userId);
+  if (!bucket) {
+    bucket = { windowStart: nowTs, count: 0 };
+  }
+
+  if (nowTs - bucket.windowStart > windowMs) {
+    bucket.windowStart = nowTs;
+    bucket.count = 0;
+  }
+
+  if (bucket.count >= FINISH_LIMIT_PER_MINUTE) {
+    store.finishBuckets.set(userId, bucket);
+    return false;
+  }
+
+  bucket.count += 1;
+  store.finishBuckets.set(userId, bucket);
   return true;
 }

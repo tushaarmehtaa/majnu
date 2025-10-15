@@ -32,14 +32,27 @@ export function getDomain(domain: string): DomainDefinition {
   return domains[domain as DomainKey];
 }
 
-export function pickWord(domain: string): { answer: string; hint: string } {
+export function pickWord(domain: string, preferred?: string): {
+  answer: string;
+  domainHint: string;
+  wordHint?: string;
+} {
   const entry = getDomain(domain);
-  const index = Math.floor(Math.random() * entry.words.length);
-  const answer = entry.words[index];
+  const wordList = entry.words;
+  if (wordList.length === 0) {
+    throw new Error(`Domain "${domain}" has no words configured`);
+  }
+
+  let answer = preferred && wordList.includes(preferred) ? preferred : undefined;
+  if (!answer) {
+    const index = Math.floor(Math.random() * wordList.length);
+    answer = wordList[index];
+  }
 
   return {
     answer,
-    hint: entry.hint,
+    domainHint: entry.hint,
+    wordHint: undefined,
   };
 }
 

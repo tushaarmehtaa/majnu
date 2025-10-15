@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { DOMAIN_KEYS, maskWord, pickWord } from "@/lib/game";
+import { generateHintForWord } from "@/lib/hint-service";
 import { createGame, getOrCreateAnonymousUser, now } from "@/lib/instantdb";
 
 const USER_COOKIE = "majnu-user-id";
@@ -12,6 +13,7 @@ const allowedDomains = new Set<AllowedDomain>(DOMAIN_KEYS);
 
 type NewGamePayload = {
   domain?: string;
+  word?: string;
 };
 
 export async function POST(request: Request) {
@@ -36,7 +38,14 @@ export async function POST(request: Request) {
       expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
     });
 
-    const { answer, hint } = pickWord(domainKey);
+    const requestedWord = typeof body.word === "string" ? body.word.toLowerCase().trim() : undefined;
+    const { answer, domainHint } = pickWord(domainKey, requestedWord);
+    const initialHint = domainHint;
+    const hintResult = await generateHintForWord({
+      domain: domainKey,
+      word: answer,
+    });
+    const hint = hintResult.hint ?? initialHint;
     const masked = maskWord(answer);
 
     const game = await createGame({

@@ -15,6 +15,7 @@ export async function GET(request: Request) {
   const scopeParam = searchParams.get("scope") ?? "daily";
   const limitParam = Number.parseInt(searchParams.get("limit") ?? "", 10);
   const limit = Number.isNaN(limitParam) ? DEFAULT_LIMIT : Math.min(limitParam, 500);
+  const cursor = searchParams.get("cursor") ?? undefined;
 
   if (scopeParam !== "daily" && scopeParam !== "weekly") {
     return NextResponse.json({ error: "invalid scope" }, { status: 400 });
@@ -31,20 +32,26 @@ export async function GET(request: Request) {
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
   });
 
-  const { entries, userEntry } = await getLeaderboard(scopeParam, limit, user.id);
+  const leaderboard = await getLeaderboard(scopeParam, limit, user.id, {
+    cursor,
+  });
   const stats = await getUserStats(user.id);
 
   return NextResponse.json({
     scope: scopeParam,
-    entries,
-    user: userEntry ?? {
-      user_id: user.id,
-      handle: user.handle ?? null,
-      wins: 0,
-      losses: 0,
+    items: leaderboard.items,
+    nextCursor: leaderboard.nextCursor ?? null,
+    total: leaderboard.total,
+    summary: leaderboard.summary,
+    my: {
+      rank: leaderboard.userEntry?.rank ?? null,
       score: stats.score_total,
+      streak: stats.streak_current,
+      badges: leaderboard.userEntry?.badges ?? [],
       streak_best: stats.streak_best,
-      rank: null,
+      wins: stats.wins_all,
+      losses: stats.losses_all,
+      handle: user.handle ?? null,
     },
   });
 }

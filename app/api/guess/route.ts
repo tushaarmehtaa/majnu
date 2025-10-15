@@ -4,6 +4,7 @@ import { isLoss, isWin, reveal } from "@/lib/game";
 import {
   checkGuessRate,
   getGameById,
+  getUserRank,
   now,
   onGameFinish,
   updateGame,
@@ -96,9 +97,19 @@ export async function POST(request: Request) {
     });
 
     let scoreDelta: number | undefined;
+    let scoreTotal: number | undefined;
+    let throttled = false;
+    let rank: number | null = null;
+    let requiresHandle = false;
+    let achievements;
     if (updated.status !== "active") {
       const result = await onGameFinish(updated.id, "win", updated.user_id);
       scoreDelta = result.scoreDelta;
+      scoreTotal = result.stats.score_total;
+      throttled = result.throttled;
+      requiresHandle = result.requiresHandle;
+      achievements = result.achievements;
+      rank = await getUserRank("weekly", updated.user_id);
     }
 
     return NextResponse.json({
@@ -116,6 +127,12 @@ export async function POST(request: Request) {
       hint: updated.hint,
       userId: updated.user_id,
       score_delta: scoreDelta,
+      score_total: scoreTotal,
+      throttled,
+      rank,
+      word_answer: updated.word_answer,
+      requires_handle: requiresHandle,
+      achievements,
     });
   }
 
@@ -132,9 +149,19 @@ export async function POST(request: Request) {
   });
 
   let scoreDelta: number | undefined;
+  let scoreTotal: number | undefined;
+  let throttled = false;
+  let rank: number | null = null;
+  let requiresHandle = false;
+  let achievements;
   if (updated.status !== "active") {
     const result = await onGameFinish(updated.id, "loss", updated.user_id);
     scoreDelta = result.scoreDelta;
+    scoreTotal = result.stats.score_total;
+    throttled = result.throttled;
+    requiresHandle = result.requiresHandle;
+    achievements = result.achievements;
+    rank = await getUserRank("weekly", updated.user_id);
   }
 
   return NextResponse.json({
@@ -152,5 +179,11 @@ export async function POST(request: Request) {
     hint: updated.hint,
     userId: updated.user_id,
     score_delta: scoreDelta,
+    score_total: scoreTotal,
+    throttled,
+    rank,
+    word_answer: updated.word_answer,
+    requires_handle: requiresHandle,
+    achievements,
   });
 }
