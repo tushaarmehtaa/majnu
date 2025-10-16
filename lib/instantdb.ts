@@ -1,5 +1,7 @@
 import { randomUUID } from "crypto";
 
+import domains from "@/data/domains.json";
+
 import type { GameStatus } from "@/lib/game";
 import { dateKey, weekKey } from "@/lib/datekeys";
 import { scoreDelta, type GameResult } from "@/lib/score";
@@ -11,10 +13,13 @@ export type UserRecord = {
   created_at: string;
 };
 
+export type GameMode = "standard" | "daily";
+
 export type GameRecord = {
   id: string;
   user_id: string;
   domain: string;
+  mode: GameMode;
   word_answer: string;
   word_masked: string;
   hint: string;
@@ -107,6 +112,11 @@ type InMemoryInstantDB = {
   handles: Map<string, string>;
   achievements: Map<string, AchievementRecord>;
   shortLinks: Map<string, ShortLinkRecord>;
+  wordHistory: Map<string, string[]>;
+  gameFinishes: Map<string, GameFinishSnapshot>;
+  dailyWords: Map<string, DailySelection>;
+  dailyAttempts: Map<string, string>;
+  dailyHistory: string[];
 };
 
 declare global {
@@ -131,6 +141,11 @@ function createStore(): InMemoryInstantDB {
       handles: new Map<string, string>(),
       achievements: new Map<string, AchievementRecord>(),
       shortLinks: new Map<string, ShortLinkRecord>(),
+      wordHistory: new Map<string, string[]>(),
+      gameFinishes: new Map<string, GameFinishSnapshot>(),
+      dailyWords: new Map<string, DailySelection>(),
+      dailyAttempts: new Map<string, string>(),
+      dailyHistory: [],
     };
   }
 
@@ -216,18 +231,21 @@ export async function createGame({
   answer,
   hint,
   masked,
+  mode = "standard",
 }: {
   userId: string;
   domain: string;
   answer: string;
   hint: string;
   masked: string;
+  mode?: GameMode;
 }): Promise<GameRecord> {
   const id = randomUUID();
   const record: GameRecord = {
     id,
     user_id: userId,
     domain,
+    mode,
     word_answer: answer,
     word_masked: masked,
     hint,
@@ -442,6 +460,181 @@ export type OnGameFinishResult = {
   achievements: AchievementRecord[];
 };
 
+const WORD_HISTORY_SIZE = 15;
+
+function historyKey(userId: string, domain: string): string {
+  return `${userId.toLowerCase()}::${domain.toLowerCase()}`;
+}
+
+export function getRecentWordsForUser(userId: string, domain: string): string[] {
+  const key = historyKey(userId, domain);
+  const recent = store.wordHistory.get(key);
+  return recent ? [...recent] : [];
+}
+
+export function rememberWordForUser(userId: string, domain: string, word: string) {
+  const key = historyKey(userId, domain);
+  const current = store.wordHistory.get(key) ?? [];
+  const normalized = word.toLowerCase();
+  const next = [normalized, ...current.filter((value) => value !== normalized)].slice(
+    0,
+    WORD_HISTORY_SIZE,
+  );
+  store.wordHistory.set(key, next);
+}
+
+type DailySelection = {
+  domain: string;
+  word: string;
+};
+
+const DAILY_HISTORY_LIMIT = 15;
+
+const DAILY_CANDIDATES: DailySelection[] = Object.entries(domains).flatMap(
+  ([domain, definition]) =>
+    definition.words.map((word) => ({
+      domain,
+      word: word.toLowerCase(),
+    })),
+);
+
+function stringToSeed(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+function shuffleDaily(items: DailySelection[], seedKey: string): DailySelection[] {
+  const seed = stringToSeed(seedKey);
+  let state = seed;
+  const random = () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return (state >>> 0) / 4294967296;
+  };
+  const array = [...items];
+  for (let i = array.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+function dailySelectionKey(selection: DailySelection): string {
+  return `${selection.domain}::${selection.word}`;
+}
+
+function dailyAttemptKey(userId: string, dateKey: string): string {
+  return `${userId}:${dateKey}`;
+}
+
+export function getDailySelection(dateKey: string): DailySelection {
+  const existing = store.dailyWords.get(dateKey);
+  if (existing) {
+    return existing;
+  }
+
+  const recent = new Set(store.dailyHistory);
+  const shuffled = shuffleDaily(DAILY_CANDIDATES, dateKey);
+  const choice =
+    shuffled.find((candidate) => !recent.has(dailySelectionKey(candidate))) ??
+    shuffled[0];
+
+  store.dailyWords.set(dateKey, choice);
+  store.dailyHistory = [
+    dailySelectionKey(choice),
+    ...store.dailyHistory.filter((key) => key !== dailySelectionKey(choice)),
+  ].slice(0, DAILY_HISTORY_LIMIT);
+
+  return choice;
+}
+
+export function recordDailyAttempt(userId: string, date: string, gameId: string) {
+  store.dailyAttempts.set(dailyAttemptKey(userId, date), gameId);
+}
+
+export function getDailyAttempt(userId: string, date: string): string | undefined {
+  return store.dailyAttempts.get(dailyAttemptKey(userId, date));
+}
+
+export type GameFinishSnapshot = {
+  game: GameRecord;
+  scoreDelta: number;
+  scoreTotal: number;
+  throttled: boolean;
+  requiresHandle: boolean;
+  achievements: AchievementRecord[];
+};
+
+export async function finalizeGame(
+  gameId: string,
+  result: GameResult,
+  patch: Partial<
+    Pick<
+      GameRecord,
+      | "word_masked"
+      | "wrong_guesses_count"
+      | "status"
+      | "finished_at"
+      | "guessed_letters"
+      | "wrong_letters"
+    >
+  > & { finished_at?: string },
+): Promise<GameFinishSnapshot> {
+  const cached = store.gameFinishes.get(gameId);
+  if (cached) {
+    return cached;
+  }
+
+  const game = await getGameById(gameId);
+  if (!game) {
+    throw new Error("Game not found");
+  }
+
+  if (game.status !== "active") {
+    const stats = getOrCreateUserStats(game.user_id);
+    const snapshot: GameFinishSnapshot = {
+      game,
+      scoreDelta: 0,
+      scoreTotal: stats.score_total,
+      throttled: false,
+      requiresHandle: false,
+      achievements: [],
+    };
+    store.gameFinishes.set(gameId, snapshot);
+    return snapshot;
+  }
+
+  const finishedAt = patch.finished_at ?? now();
+  const updated = await updateGame(gameId, {
+    ...patch,
+    status: result === "win" ? "won" : "lost",
+    finished_at: finishedAt,
+  });
+
+  const finishResult = await onGameFinish(
+    updated.id,
+    result,
+    updated.user_id,
+    new Date(finishedAt),
+  );
+  const finalGame = (await getGameById(gameId)) ?? updated;
+  const snapshot: GameFinishSnapshot = {
+    game: finalGame,
+    scoreDelta: finishResult.scoreDelta,
+    scoreTotal: finishResult.stats.score_total,
+    throttled: finishResult.throttled,
+    requiresHandle: finishResult.requiresHandle,
+    achievements: finishResult.achievements,
+  };
+  store.gameFinishes.set(gameId, snapshot);
+  return snapshot;
+}
+
 export async function onGameFinish(
   gameId: string,
   result: GameResult,
@@ -487,7 +680,9 @@ export async function onGameFinish(
     };
   }
 
-  const delta = scoreDelta(result, streakBefore);
+  const baseDelta = scoreDelta(result, streakBefore);
+  const dailyBonus = game.mode === "daily" && result === "win" ? 2 : 0;
+  const delta = baseDelta + dailyBonus;
 
   if (result === "win") {
     stats.wins_all += 1;

@@ -1,9 +1,11 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { DOMAIN_KEYS, maskWord, pickWord } from "@/lib/game";
+import { DOMAIN_KEYS, getDomain, maskWord } from "@/lib/game";
 import { generateHintForWord } from "@/lib/hint-service";
 import { createGame, getOrCreateAnonymousUser, now } from "@/lib/instantdb";
+import { logServerError, logServerEvent } from "@/lib/logger";
+import { selectWordForUser } from "@/lib/word-randomizer";
 
 const USER_COOKIE = "majnu-user-id";
 
@@ -13,7 +15,7 @@ const allowedDomains = new Set<AllowedDomain>(DOMAIN_KEYS);
 
 type NewGamePayload = {
   domain?: string;
-  word?: string;
+  preferredWord?: string;
 };
 
 export async function POST(request: Request) {
@@ -38,22 +40,43 @@ export async function POST(request: Request) {
       expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
     });
 
-    const requestedWord = typeof body.word === "string" ? body.word.toLowerCase().trim() : undefined;
-    const { answer, domainHint } = pickWord(domainKey, requestedWord);
-    const initialHint = domainHint;
+    const domainDefinition = getDomain(domainKey);
+    const pool = domainDefinition.words;
+    const preferredWord =
+      typeof body.preferredWord === "string"
+        ? body.preferredWord.trim().toLowerCase()
+        : undefined;
+    const answer = await selectWordForUser({
+      domain: domainKey,
+      pool,
+      userId: user.id,
+      preferred: preferredWord,
+    });
+    const normalizedAnswer = answer.toLowerCase();
+    const initialHint = domainDefinition.hint;
     const hintResult = await generateHintForWord({
       domain: domainKey,
-      word: answer,
+      word: normalizedAnswer,
     });
     const hint = hintResult.hint ?? initialHint;
-    const masked = maskWord(answer);
+    const masked = maskWord(normalizedAnswer);
 
     const game = await createGame({
       userId: user.id,
       domain: domainKey,
-      answer,
+      answer: normalizedAnswer,
       hint,
       masked,
+      mode: "standard",
+    });
+
+    logServerEvent("new_game", {
+      userId: user.id,
+      gameId: game.id,
+      domain: domainKey,
+      mode: "standard",
+      wordLength: normalizedAnswer.length,
+      hintSource: hintResult.source,
     });
 
     return NextResponse.json({
@@ -69,8 +92,12 @@ export async function POST(request: Request) {
       created_at: game.created_at,
       finished_at: game.finished_at,
       updated_at: now(),
+      mode: game.mode,
     });
   } catch (error) {
+    logServerError("new_game_error", error, {
+      domain: domainKey,
+    });
     const message =
       error instanceof Error ? error.message : "Failed to create game";
     return NextResponse.json({ error: message }, { status: 500 });

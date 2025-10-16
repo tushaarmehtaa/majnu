@@ -17,6 +17,7 @@ export async function GET(
     gameId: game.id,
     userId: game.user_id,
     domain: game.domain,
+    mode: game.mode,
     masked: game.word_masked,
     hint: game.hint,
     status: game.status,

@@ -32,30 +32,6 @@ export function getDomain(domain: string): DomainDefinition {
   return domains[domain as DomainKey];
 }
 
-export function pickWord(domain: string, preferred?: string): {
-  answer: string;
-  domainHint: string;
-  wordHint?: string;
-} {
-  const entry = getDomain(domain);
-  const wordList = entry.words;
-  if (wordList.length === 0) {
-    throw new Error(`Domain "${domain}" has no words configured`);
-  }
-
-  let answer = preferred && wordList.includes(preferred) ? preferred : undefined;
-  if (!answer) {
-    const index = Math.floor(Math.random() * wordList.length);
-    answer = wordList[index];
-  }
-
-  return {
-    answer,
-    domainHint: entry.hint,
-    wordHint: undefined,
-  };
-}
-
 export function maskWord(answer: string): string {
   return answer
     .split("")

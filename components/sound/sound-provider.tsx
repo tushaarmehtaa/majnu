@@ -38,22 +38,22 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
   }, [muted]);
 
   useEffect(() => {
-    soundManager.preload().catch(() => null);
     if (typeof window === "undefined") return;
 
-    const unlock = async () => {
+    const unlockAndPreload = async () => {
       try {
         await soundManager.unlock();
+        await soundManager.preload();
       } catch (error) {
-        console.warn("Unable to unlock audio context", error);
+        console.warn("Unable to initialise audio context", error);
       }
     };
 
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("pointerdown", unlockAndPreload, { once: true });
+    window.addEventListener("keydown", unlockAndPreload, { once: true });
     return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("pointerdown", unlockAndPreload);
+      window.removeEventListener("keydown", unlockAndPreload);
     };
   }, []);
 

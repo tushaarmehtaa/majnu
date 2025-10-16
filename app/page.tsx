@@ -9,12 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { COPY } from "@/lib/copy";
 
-const highlights = [
-  "Dark-comedy hangman with Bollywood flair.",
-  "Anonymous play. No accounts. All execution.",
-  "Leaderboards remember the saviors. And the fallen.",
-];
-
 export default function LandingPage() {
   const [topPlayers, setTopPlayers] = useState<
     Array<{ cursor: string; rank: number; handle: string | null; score: number }>
@@ -70,6 +64,12 @@ export default function LandingPage() {
       >
         <header className="flex flex-col items-center gap-4 text-center">
           <Badge className="bg-red/10 text-red shadow-sm">Bollywood Tragicomedy</Badge>
+          <Link
+            href="/play?mode=daily"
+            className="inline-flex items-center justify-center rounded-full border border-red/40 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-red transition hover:border-red hover:bg-red/10"
+          >
+            {COPY.landing.dailyChip}
+          </Link>
           <h1 className="font-display text-5xl uppercase tracking-[0.25em] text-red sm:text-7xl">
             {COPY.landing.title}
           </h1>
@@ -84,7 +84,7 @@ export default function LandingPage() {
           </p>
         </header>
         <ul className="grid gap-3 text-sm text-foreground md:grid-cols-3">
-          {highlights.map((item) => (
+          {COPY.landing.highlights.map((item) => (
             <motion.li
               key={item}
               initial={{ opacity: 0, y: 12 }}

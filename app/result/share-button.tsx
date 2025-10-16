@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { logEvent } from "@/lib/analytics";
+import { COPY } from "@/lib/copy";
 import { buildShareCopy } from "@/lib/share";
 
 type ShareButtonProps = {
@@ -80,13 +81,13 @@ export function ShareButton({
       const popup = window.open(intentUrl, "_blank", "noopener,noreferrer");
       if (popup) {
         toast({
-          title: "Tweet ready — copy looks killer.",
-          description: "Preview the card and send it into the timeline.",
+          title: COPY.share.successToast.title,
+          description: COPY.share.successToast.description,
         });
       } else {
         toast({
-          title: "Pop-up blocked.",
-          description: "Allow pop-ups for Save Majnu Bhai and try again.",
+          title: COPY.share.blockedToast.title,
+          description: COPY.share.blockedToast.description,
           variant: "destructive",
         });
       }
@@ -100,7 +101,7 @@ export function ShareButton({
       onClick={handleShare}
       className={className}
     >
-      Share Your Score
+      {COPY.share.button}
     </Button>
   );
 }

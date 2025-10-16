@@ -1,4 +1,4 @@
-const BUFFER_SIZE = 15;
+import { getRecentWordsForUser, rememberWordForUser } from "@/lib/instantdb";
 
 function mulberry32(seed: number) {
   return () => {
@@ -29,37 +29,38 @@ function shuffleWithSeed<T>(items: T[], seedKey: string): T[] {
   return array;
 }
 
-export function selectWordForDomain(domain: string, pool: string[], userId: string): string {
+type SelectWordOptions = {
+  domain: string;
+  pool: string[];
+  userId: string;
+  preferred?: string | null;
+  today?: string;
+};
+
+export async function selectWordForUser({
+  domain,
+  pool,
+  userId,
+  preferred,
+  today,
+}: SelectWordOptions): Promise<string> {
   if (pool.length === 0) {
     throw new Error(`Domain ${domain} has no words configured`);
   }
 
-  if (typeof window === "undefined") {
-    return pool[Math.floor(Math.random() * pool.length)];
+  const normalizedPool = pool.map((word) => word.toLowerCase());
+  const normalizedPreferred = preferred?.toLowerCase();
+
+  if (normalizedPreferred && normalizedPool.includes(normalizedPreferred)) {
+    await rememberWordForUser(userId, domain, normalizedPreferred);
+    return normalizedPreferred;
   }
 
-  const key = `recentWords:${domain}`;
-  let recentList: string[] = [];
-  try {
-    recentList = JSON.parse(window.localStorage.getItem(key) ?? "[]");
-    if (!Array.isArray(recentList)) {
-      recentList = [];
-    }
-  } catch {
-    recentList = [];
-  }
-
-  const recent = new Set(recentList);
-  const seed = `${userId}:${new Date().toDateString()}`;
-  const shuffled = shuffleWithSeed(pool, seed);
+  const recent = new Set(getRecentWordsForUser(userId, domain));
+  const seedKey = `${userId}:${today ?? new Date().toISOString().split("T")[0]}`;
+  const shuffled = shuffleWithSeed(normalizedPool, seedKey);
   const choice = shuffled.find((word) => !recent.has(word)) ?? shuffled[0];
 
-  const next = [choice, ...recentList.filter((word) => word !== choice)];
-  try {
-    window.localStorage.setItem(key, JSON.stringify(next.slice(0, BUFFER_SIZE)));
-  } catch {
-    // ignore storage errors
-  }
-
+  await rememberWordForUser(userId, domain, choice);
   return choice;
 }

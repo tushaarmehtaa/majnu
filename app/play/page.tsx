@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
@@ -36,7 +36,6 @@ import { cn } from "@/lib/utils";
 import { COPY } from "@/lib/copy";
 import { useSound } from "@/hooks/use-sound";
 import { logEvent, setAnalyticsUserId } from "@/lib/analytics";
-import { selectWordForDomain } from "@/lib/word-randomizer";
 import { useUser } from "@/context/user-context";
 import type { AchievementRecord } from "@/lib/instantdb";
 
@@ -44,6 +43,7 @@ type GameState = {
   gameId: string;
   userId: string;
   domain: string;
+  mode: "standard" | "daily";
   masked: string;
   hint: string;
   status: GameStatus;
@@ -89,6 +89,7 @@ const toTitleCase = (value: string) =>
 
 export default function PlayPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { promptHandle, refresh, user } = useUser();
   const [activeTab, setActiveTab] = useState<"domain" | "game">("domain");
@@ -100,6 +101,8 @@ export default function PlayPage() {
   const [isHydrating, setIsHydrating] = useState(true);
   const [hydrationError, setHydrationError] = useState<string | null>(null);
   const [flashingLetter, setFlashingLetter] = useState<string | null>(null);
+  const confettiFiredRef = useRef(false);
+  const autoDailyTriggerRef = useRef(false);
   const { play: playCorrect } = useSound("/sfx/correct-guess.mp3");
   const { play: playWrong } = useSound("/sfx/wrong-guess.mp3");
   const { play: playWin } = useSound("/sfx/win.mp3", { volume: 0.85 });
@@ -111,6 +114,10 @@ export default function PlayPage() {
   );
 
   const formattedDomain = useMemo(() => {
+    if (game?.mode === "daily" || selectedDomain === "daily") {
+      return COPY.game.dailyLabel;
+    }
+
     if (game?.domain) {
       return toTitleCase(game.domain);
     }
@@ -119,7 +126,7 @@ export default function PlayPage() {
       return toTitleCase(selectedDomain);
     }
 
-    return "Pick a domain to play";
+    return COPY.game.domainPlaceholder;
   }, [game, selectedDomain]);
 
   const guessedLetterSet = useMemo(() => {
@@ -128,6 +135,9 @@ export default function PlayPage() {
     }
     return new Set([...game.guessed_letters, ...game.wrong_letters]);
   }, [game]);
+
+  const isDailyActive = game?.mode === "daily" || selectedDomain === "daily";
+  const isDailyPending = pendingDomain === "daily" && isStarting;
 
   useEffect(() => {
     if (!flashingLetter) {
@@ -153,6 +163,10 @@ export default function PlayPage() {
 
       if (state.status === "won") {
         playWin();
+        if (!confettiFiredRef.current) {
+          confetti({ particleCount: 120, spread: 70, origin: { y: 0.7 } });
+          confettiFiredRef.current = true;
+        }
       } else if (state.status === "lost") {
         playLoss();
       }
@@ -177,16 +191,16 @@ export default function PlayPage() {
 
       if (state.throttled) {
         toast({
-          title: "Slow down, hero.",
-          description: "This finish didn’t count toward the leaderboard.",
+          title: COPY.game.slowDown.title,
+          description: COPY.game.slowDown.description,
           variant: "destructive",
         });
       }
 
       if (state.requiresHandle) {
         toast({
-          title: "Claim your handle",
-          description: "Set a handle so we can crown you on the leaderboard.",
+          title: COPY.game.handlePrompt.title,
+          description: COPY.game.handlePrompt.description,
         });
         promptHandle();
       }
@@ -198,9 +212,9 @@ export default function PlayPage() {
             description: achievement.description,
           });
         });
-        confetti({ particleCount: 120, spread: 70, origin: { y: 0.7 } });
-        refresh().catch(() => null);
       }
+
+      refresh().catch(() => null);
 
       const searchParams = new URLSearchParams({
         status: state.status,
@@ -216,9 +230,6 @@ export default function PlayPage() {
       }
       if (typeof state.rank === "number") {
         searchParams.set("rank", String(state.rank));
-      }
-      if (state.word_answer) {
-        searchParams.set("word", state.word_answer);
       }
       if (state.throttled) {
         searchParams.set("throttled", "true");
@@ -252,14 +263,6 @@ export default function PlayPage() {
         setPendingDomain(domainKey);
         setSelectedDomain(domainKey);
 
-        const pool =
-          (domains as Record<string, { words: string[] }>)[domainKey]?.words ?? [];
-        let chosenWord: string | undefined;
-        if (pool.length > 0) {
-          const selectorUser = game?.userId ?? user?.userId ?? "anon";
-          chosenWord = selectWordForDomain(domainKey, pool, selectorUser);
-        }
-
         const response = await fetch("/api/new-game", {
           method: "POST",
           headers: {
@@ -267,7 +270,6 @@ export default function PlayPage() {
           },
           body: JSON.stringify({
             domain: domainKey,
-            word: chosenWord,
           }),
         });
 
@@ -276,10 +278,12 @@ export default function PlayPage() {
         }
 
         const payload = (await response.json()) as GameResponse;
+        const domainLabel = toTitleCase(payload.domain ?? domainKey);
         const nextState: GameState = {
           gameId: payload.gameId,
           userId: payload.userId,
           domain: payload.domain,
+          mode: payload.mode ?? "standard",
           masked: payload.masked,
           hint: payload.hint,
           status: payload.status,
@@ -296,6 +300,7 @@ export default function PlayPage() {
         };
 
         setGame(nextState);
+        confettiFiredRef.current = false;
         setActiveTab("game");
         setSelectedDomain(payload.domain ?? domainKey);
         syncLocalStorage(nextState);
@@ -308,19 +313,20 @@ export default function PlayPage() {
           metadata: {
             domain: nextState.domain,
             game_id: nextState.gameId,
+            mode: nextState.mode,
           },
         });
 
         toast({
-          title: "Majnu approaches the gallows.",
-          description: `Domain locked: ${toTitleCase(payload.domain ?? domainKey)}.`,
+          title: COPY.game.start.title,
+          description: COPY.game.start.description(domainLabel),
         });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Unable to start game";
         toast({
-          title: "Could not start game",
-          description: message,
+          title: COPY.game.startError.title,
+          description: COPY.game.startError.description(message),
           variant: "destructive",
         });
       } finally {
@@ -331,12 +337,112 @@ export default function PlayPage() {
     [game, isStarting, syncLocalStorage, toast, user],
   );
 
+  const beginDailyGame = useCallback(async () => {
+    if (isStarting) {
+      return;
+    }
+
+    try {
+      setIsStarting(true);
+      setPendingDomain("daily");
+      setSelectedDomain("daily");
+
+      const response = await fetch("/api/daily-game", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.status === 409) {
+        toast({
+          title: COPY.game.dailyLocked.title,
+          description: COPY.game.dailyLocked.description,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("Unable to start daily challenge");
+      }
+
+      const payload = (await response.json()) as GameResponse;
+      const nextState: GameState = {
+        gameId: payload.gameId,
+        userId: payload.userId,
+        domain: payload.domain,
+        mode: payload.mode ?? "daily",
+        masked: payload.masked,
+        hint: payload.hint,
+        status: payload.status,
+        wrong_guesses_count: payload.wrong_guesses_count,
+        guessed_letters: payload.guessed_letters,
+        wrong_letters: payload.wrong_letters,
+        finished_at: payload.finished_at ?? null,
+        score_delta: null,
+        score_total: null,
+        rank: null,
+        throttled: false,
+        requiresHandle: false,
+        achievements: [],
+      };
+
+      setGame(nextState);
+      confettiFiredRef.current = false;
+      setActiveTab("game");
+      syncLocalStorage(nextState);
+      if (nextState.userId) {
+        setAnalyticsUserId(nextState.userId);
+      }
+      logEvent({
+        event: "game_start",
+        userId: nextState.userId,
+        metadata: {
+          domain: nextState.domain,
+          game_id: nextState.gameId,
+          mode: nextState.mode,
+        },
+      });
+
+      toast({
+        title: COPY.game.dailyStart.title,
+        description: COPY.game.dailyStart.description(toTitleCase(nextState.domain)),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to start daily challenge";
+      toast({
+        title: COPY.game.dailyError.title,
+        description: COPY.game.dailyError.description(message),
+        variant: "destructive",
+      });
+    } finally {
+      setIsStarting(false);
+      setPendingDomain(null);
+    }
+  }, [isStarting, setAnalyticsUserId, syncLocalStorage, toast]);
+
+  useEffect(() => {
+    if (autoDailyTriggerRef.current) {
+      return;
+    }
+    if (!searchParams) {
+      return;
+    }
+    if (searchParams.get("mode") === "daily") {
+      autoDailyTriggerRef.current = true;
+      void beginDailyGame();
+    }
+  }, [beginDailyGame, searchParams]);
+
   const applyGuessResult = useCallback(
     (payload: GameResponse) => {
       const nextState: GameState = {
         gameId: payload.gameId,
         userId: payload.userId ?? game?.userId ?? "",
         domain: payload.domain ?? game?.domain ?? "",
+        mode: payload.mode ?? game?.mode ?? "standard",
         masked: payload.masked,
         hint: payload.hint ?? game?.hint ?? "",
         status: payload.status,
@@ -374,9 +480,10 @@ export default function PlayPage() {
       }
 
       if (guessedLetterSet.has(normalized)) {
+        const repeatCopy = COPY.game.repeatToast(letter);
         toast({
-          title: COPY.game.toasts.repeat,
-          description: `"${letter.toUpperCase()}" has already been tried.`,
+          title: repeatCopy.title,
+          description: repeatCopy.description,
         });
         return;
       }
@@ -399,31 +506,39 @@ export default function PlayPage() {
         const payload = (await response.json()) as GameResponse;
 
         if (payload.isRepeat) {
+          const repeatCopy = COPY.game.repeatToast(letter);
           toast({
-            title: COPY.game.toasts.repeat,
-            description: `Letter ${letter.toUpperCase()} was a wasted breath.`,
+            title: repeatCopy.title,
+            description: repeatCopy.description,
           });
           return;
         }
 
         if (payload.isCorrect) {
           playCorrect();
+          const correctCopy = COPY.game.correctToast(letter);
           toast({
-            title: COPY.game.toasts.correct,
-            description: `Letter ${letter.toUpperCase()} bought Majnu a heartbeat.`,
+            title: correctCopy.title,
+            description: correctCopy.description,
           });
         } else {
           playWrong();
           const isLastChance =
             payload.wrong_guesses_count === MAX_WRONG_GUESSES - 1;
           setFlashingLetter(normalized);
-          toast({
-            title: isLastChance ? COPY.game.toasts.lastChance : COPY.game.toasts.wrong,
-            description: isLastChance
-              ? "One more mistake and the rope snaps tight."
-              : `Letter ${letter.toUpperCase()} tightened the knot.`,
-            variant: isLastChance ? "destructive" : undefined,
-          });
+          if (isLastChance) {
+            toast({
+              title: COPY.game.lastChanceToast.title,
+              description: COPY.game.lastChanceToast.description,
+              variant: "destructive",
+            });
+          } else {
+            const wrongCopy = COPY.game.wrongToast(letter);
+            toast({
+              title: wrongCopy.title,
+              description: wrongCopy.description,
+            });
+          }
         }
 
         applyGuessResult(payload);
@@ -431,8 +546,8 @@ export default function PlayPage() {
         const message =
           error instanceof Error ? error.message : "Guess failed";
         toast({
-          title: "Steel your nerves",
-          description: message,
+          title: COPY.game.guessError.title,
+          description: COPY.game.guessError.description(message),
           variant: "destructive",
         });
       } finally {
@@ -462,8 +577,8 @@ export default function PlayPage() {
 
       const payload = (await response.json()) as GameResponse;
       toast({
-        title: "You walked away",
-        description: "Majnu stares at you as the stool kicks out.",
+        title: COPY.game.giveUp.title,
+        description: COPY.game.giveUp.description,
         variant: "destructive",
       });
       applyGuessResult(payload);
@@ -471,8 +586,8 @@ export default function PlayPage() {
       const message =
         error instanceof Error ? error.message : "Unable to give up";
       toast({
-        title: "The knot tightens",
-        description: message,
+        title: COPY.game.giveUpError.title,
+        description: COPY.game.giveUpError.description(message),
         variant: "destructive",
       });
     }
@@ -500,17 +615,22 @@ export default function PlayPage() {
       }
 
       const payload = (await response.json()) as GameState;
+      const nextState: GameState = {
+        ...payload,
+        mode: payload.mode ?? "standard",
+      };
 
-      setGame(payload);
-      setSelectedDomain(payload.domain);
+      setGame(nextState);
+      confettiFiredRef.current = nextState.status === "won";
+      setSelectedDomain(nextState.domain);
       setActiveTab("game");
-      syncLocalStorage(payload);
-      if (payload.userId) {
-        setAnalyticsUserId(payload.userId);
+      syncLocalStorage(nextState);
+      if (nextState.userId) {
+        setAnalyticsUserId(nextState.userId);
       }
 
-      if (payload.status !== "active") {
-        handleGameFinished(payload);
+      if (nextState.status !== "active") {
+        handleGameFinished(nextState);
       }
     } catch (error) {
       const message =
@@ -677,14 +797,29 @@ export default function PlayPage() {
           <Card className="border border-dashed border-red/30 bg-beige/90 shadow-[0_25px_60px_-20px_rgba(192,57,43,0.35)]">
             <CardHeader>
               <CardTitle className="font-display text-3xl uppercase tracking-[0.2em] text-red">
-                Choose Majnu’s fate
+                {COPY.game.domainCard.title}
               </CardTitle>
               <CardDescription className="text-foreground/80">
-                Pick a preset domain or whisper a new topic. Every letter counts toward the gallows.
+                {COPY.game.domainCard.description}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={beginDailyGame}
+                  disabled={isStarting}
+                  onMouseEnter={() => setSelectedDomain("daily")}
+                  onFocus={() => setSelectedDomain("daily")}
+                  className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red disabled:opacity-70 ${
+                    isDailyActive
+                      ? "border-red bg-red text-beige"
+                      : "border-red/40 bg-white text-red hover:border-red"
+                  }`}
+                >
+                  <span>{COPY.game.dailyLabel}</span>
+                  {isDailyPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                </button>
                 {domainEntries.map(([domainKey]) => {
                   const isSelected =
                     game?.domain === domainKey || selectedDomain === domainKey;
@@ -710,15 +845,18 @@ export default function PlayPage() {
                 })}
               </div>
               <p className="text-sm text-foreground/60">
-                {selectedDomain
-                  ? domainEntries.find(([key]) => key === selectedDomain)?.[1].hint ??
-                    ""
-                  : "Pick a domain chip to start a new execution."}
+                {selectedDomain === "daily"
+                  ? COPY.game.dailyHint
+                  : selectedDomain
+                    ? domainEntries.find(([key]) => key === selectedDomain)?.[1].hint ?? ""
+                    : COPY.game.domainCard.emptyHint}
               </p>
             </CardContent>
             <CardFooter className="flex flex-wrap items-center justify-between gap-3 text-sm text-foreground/70">
-              <span>Tip: Highlight a domain chip and smash <kbd>Enter</kbd> to start the execution.</span>
-              <span>Keyboard shortcuts: letters A–Z guess directly.</span>
+              <span>
+                {COPY.game.keyboard.tipBefore} <kbd>Enter</kbd> {COPY.game.keyboard.tipAfter}
+              </span>
+              <span>{COPY.game.keyboard.shortcuts}</span>
             </CardFooter>
           </Card>
         </TabsContent>
@@ -731,8 +869,13 @@ export default function PlayPage() {
                   {formattedDomain}
                 </CardTitle>
                 <CardDescription className="text-foreground/70">
-                  Guess wisely before the rope tightens. Five strikes and Majnu drops.
+                  {COPY.game.statusDescription}
                 </CardDescription>
+                {game?.mode === "daily" ? (
+                  <p className="mt-1 text-xs uppercase tracking-[0.3em] text-foreground/60">
+                    {COPY.game.dailyDomain(toTitleCase(game.domain))} · {COPY.game.dailyBonusNote}
+                  </p>
+                ) : null}
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -748,7 +891,7 @@ export default function PlayPage() {
               ) : !game ? (
                 <div className="rounded-lg border border-dashed border-red/30 bg-beige/90 p-6 text-center text-foreground">
                   <p className="text-lg font-semibold text-red">
-                    Pick a domain to summon Majnu Bhai.
+                    {COPY.game.emptyState.title}
                   </p>
                   {hydrationError && (
                     <p className="mt-2 text-sm text-red">{hydrationError}</p>

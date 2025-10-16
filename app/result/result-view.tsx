@@ -26,6 +26,7 @@ type ResultViewProps = {
     answer: string;
     wrongGuesses: number;
     hint: string;
+    mode?: "standard" | "daily";
   } | null;
   share: {
     url: string;
@@ -119,6 +120,9 @@ export function ResultView({
               <div
                 className={`rounded-2xl border ${borderClass} bg-white/90 p-6 text-left text-foreground shadow-[0_12px_24px_-16px_rgba(0,0,0,0.35)]`}
               >
+                {gameInfo.mode === "daily" ? (
+                  <Badge className="mb-3 bg-red/10 text-red">Daily Word</Badge>
+                ) : null}
                 <p className="text-lg font-semibold">Domain: {gameInfo.domainLabel}</p>
                 <p className="mt-3 text-sm font-semibold uppercase tracking-[0.3em] text-red">
                   {COPY.result.answerLabel(gameInfo.answer)}

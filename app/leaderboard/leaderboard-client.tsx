@@ -251,13 +251,19 @@ export function LeaderboardClient({ userId, stats, initialData }: LeaderboardCli
     }
   };
 
+  const activeProfile = state[activeScope].my;
+  const activeBadgeCount = activeProfile.badges.length;
+  const activeHandleLabel = activeProfile.handle
+    ? `@${activeProfile.handle}`
+    : COPY.leaderboard.profileCard.anonymous;
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12">
       <div className="flex flex-col gap-3 text-center">
         <Badge className="mx-auto bg-red/10 text-red shadow-sm">{COPY.leaderboard.title}</Badge>
         <h1 className="font-display text-5xl uppercase tracking-[0.3em] text-red">{COPY.leaderboard.title}</h1>
         <p className="text-sm text-foreground/70">
-          Wins earn +3, losses shave off 1. Survive consecutive rounds to stack streak bonuses.
+          {COPY.leaderboard.subtitle}
         </p>
         <div className="grid gap-2 text-xs uppercase tracking-[0.3em] text-foreground/60 sm:grid-cols-2 lg:grid-cols-5">
           <span>Wins: {overview.wins}</span>
@@ -265,6 +271,28 @@ export function LeaderboardClient({ userId, stats, initialData }: LeaderboardCli
           <span>Current Streak: {overview.streak_current}</span>
           <span>Best Streak: {overview.streak_best}</span>
           <span>Total Score: {overview.score_total}</span>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-red/20 bg-white/75 p-5 shadow-[0_20px_40px_-28px_rgba(192,57,43,0.35)] md:flex md:items-center md:justify-between">
+        <div className="space-y-1 text-left">
+          <p className="text-xs uppercase tracking-[0.3em] text-foreground/60">{COPY.leaderboard.profileCard.heading}</p>
+          <p className="text-lg font-semibold text-red">{activeHandleLabel}</p>
+          <p className="text-sm text-foreground/70">{COPY.leaderboard.profileCard.subheading}</p>
+        </div>
+        <div className="mt-4 grid w-full gap-3 text-xs uppercase tracking-[0.3em] text-foreground/60 sm:grid-cols-3 md:mt-0 md:w-auto md:grid-cols-1">
+          <span className="flex flex-col rounded-xl border border-red/20 bg-white/80 px-4 py-2 text-center text-foreground">
+            <span className="text-[0.7rem] text-foreground/60">{COPY.leaderboard.profileCard.score}</span>
+            <span className="text-base font-semibold text-red">{activeProfile.score}</span>
+          </span>
+          <span className="flex flex-col rounded-xl border border-red/20 bg-white/80 px-4 py-2 text-center text-foreground">
+            <span className="text-[0.7rem] text-foreground/60">{COPY.leaderboard.profileCard.bestStreak}</span>
+            <span className="text-base font-semibold text-red">{activeProfile.streak_best}</span>
+          </span>
+          <span className="flex flex-col rounded-xl border border-red/20 bg-white/80 px-4 py-2 text-center text-foreground">
+            <span className="text-[0.7rem] text-foreground/60">{COPY.leaderboard.profileCard.badges}</span>
+            <span className="text-base font-semibold text-red">{activeBadgeCount}</span>
+          </span>
         </div>
       </div>
 

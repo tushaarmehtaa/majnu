@@ -91,6 +91,7 @@ export default async function ResultPage({
               answer: game.word_answer,
               wrongGuesses: game.wrong_guesses_count,
               hint: game.hint,
+              mode: game.mode ?? "standard",
             }
           : null
       }
