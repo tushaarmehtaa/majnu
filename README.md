@@ -22,19 +22,11 @@ A dark-comedy execution-themed word guessing game built with Next.js and TypeScr
 - Sound design with per-event SFX (correct, wrong, win, loss) and a global mute toggle
 - Lightweight analytics logging (`game_start`, `game_win`, `game_loss`, `share_click`, `sound_toggle`) output to the console for easy wiring later
 
-### Sprint 5 — Hints, Share, Leaderboards
+### Hints, Share, Leaderboards
 - Deterministic hint generation with caching and domain-based fallbacks so every round surfaces a clue
 - Twitter-only share button with randomized copy, UTM-tagged intents, and dynamic OG cards rendered by `/api/og/result`
 - Cursor-based daily/weekly leaderboards with paging, live polling, Hot Streak / Comeback badges, and per-minute finish throttling
 - Landing hero widget spotlights today’s top three saviors pulled from the leaderboard API
-
-### Sprint 6 — Identity, Hints, Share Fix, Achievements Base
-- Curated + AI-assisted hints via `/api/generate-hint` with sticky-note presentation on the play screen
-- Lightweight player identities (unique @handles + seeded avatars) required before leaderboard placement
-- Unified sound manager with persistent mute + a “Test” button to unlock audio contexts reliably
-- Dynamic result reveals (uppercase word, loss quip) and short-link powered Twitter shares with bespoke OG cards
-- Leaderboard modal view, reset timers, weekly summary banner, and richer player rows with badges
-- Achievements groundwork (First Blood, Too Slow, Hot Streak) with toast + confetti feedback and cached unlocks
 
 ### Data Management
 - In-memory storage for development (no setup required)

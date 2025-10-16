@@ -12,9 +12,10 @@ function asString(value: string | string[] | undefined): string | undefined {
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: ResultSearchParams;
+  searchParams: Promise<ResultSearchParams>;
 }): Promise<Metadata> {
-  const statusParam = asString(searchParams.status)?.toLowerCase();
+  const params = await searchParams;
+  const statusParam = asString(params.status)?.toLowerCase();
   const isWin = statusParam === "won";
   const title = isWin ? "Majnu Lives | Save Majnu Bhai" : "Majnu Dies | Save Majnu Bhai";
   const description = isWin
@@ -23,11 +24,11 @@ export async function generateMetadata({
 
   const ogParams = new URLSearchParams();
   ogParams.set("outcome", isWin ? "win" : "loss");
-  const scoreDelta = asString(searchParams.scoreDelta) ?? "0";
-  const scoreTotal = asString(searchParams.scoreTotal) ?? "0";
-  const rank = asString(searchParams.rank) ?? "";
-  const word = asString(searchParams.word) ?? "";
-  const domain = asString(searchParams.domain) ?? "";
+  const scoreDelta = asString(params.scoreDelta) ?? "0";
+  const scoreTotal = asString(params.scoreTotal) ?? "0";
+  const rank = asString(params.rank) ?? "";
+  const word = asString(params.word) ?? "";
+  const domain = asString(params.domain) ?? "";
 
   ogParams.set("score_delta", scoreDelta);
   ogParams.set("score_total", scoreTotal);
@@ -35,10 +36,10 @@ export async function generateMetadata({
   if (word) ogParams.set("word", word);
   if (domain) ogParams.set("domain", domain);
 
-  const image = `/api/og/result?${ogParams.toString()}`;
+  const image = `${SITE_URL}/api/og/result?${ogParams.toString()}`;
   const canonical = new URL("/result", SITE_URL);
   if (statusParam) canonical.searchParams.set("status", statusParam);
-  if (asString(searchParams.gameId)) canonical.searchParams.set("gameId", asString(searchParams.gameId)!);
+  if (asString(params.gameId)) canonical.searchParams.set("gameId", asString(params.gameId)!);
   if (domain) canonical.searchParams.set("domain", domain);
   if (scoreDelta) canonical.searchParams.set("scoreDelta", scoreDelta);
   if (scoreTotal) canonical.searchParams.set("scoreTotal", scoreTotal);

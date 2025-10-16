@@ -34,14 +34,15 @@ const formatTopic = (value?: string | null) => {
 export default async function ResultPage({
   searchParams,
 }: {
-  searchParams: ResultSearchParams;
+  searchParams: Promise<ResultSearchParams>;
 }) {
-  const statusParam = asString(searchParams.status)?.toLowerCase();
-  const gameId = asString(searchParams.gameId);
-  const scoreDeltaParam = parseNumber(asString(searchParams.scoreDelta));
-  const scoreTotalParam = parseNumber(asString(searchParams.scoreTotal));
-  const rankParam = parseNumber(asString(searchParams.rank));
-  const throttledParam = asString(searchParams.throttled) === "true";
+  const params = await searchParams;
+  const statusParam = asString(params.status)?.toLowerCase();
+  const gameId = asString(params.gameId);
+  const scoreDeltaParam = parseNumber(asString(params.scoreDelta));
+  const scoreTotalParam = parseNumber(asString(params.scoreTotal));
+  const rankParam = parseNumber(asString(params.rank));
+  const throttledParam = asString(params.throttled) === "true";
 
   const outcome: ResultOutcome = statusParam === "won" ? "win" : "loss";
   const heroImage = outcome === "win" ? "/majnu-states/win.png" : "/majnu-states/loss.png";

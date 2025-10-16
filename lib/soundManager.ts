@@ -70,7 +70,7 @@ class SoundManager {
     return this.muted;
   }
 
-  async play(source: string) {
+  async play(source: string, volume = 1.0) {
     if (typeof window === "undefined" || this.muted) return;
     const ctx = await this.ensureContext();
     if (!this.unlocked) {
@@ -94,7 +94,12 @@ class SoundManager {
 
     const node = ctx.createBufferSource();
     node.buffer = buffer;
-    node.connect(this.gainNode ?? ctx.destination);
+
+    const volumeNode = ctx.createGain();
+    volumeNode.gain.value = Math.max(0, Math.min(1, volume));
+    node.connect(volumeNode);
+    volumeNode.connect(this.gainNode ?? ctx.destination);
+    
     node.start(0);
   }
 

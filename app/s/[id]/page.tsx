@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 
 import { getGameById, getShortLink } from "@/lib/instantdb";
 
@@ -20,9 +21,10 @@ function inferOutcome(raw?: string | null): "win" | "loss" {
 }
 
 export async function generateMetadata(
-  { params }: { params: ShareParams },
+  { params }: { params: Promise<ShareParams> },
 ): Promise<Metadata> {
-  const record = await getShortLink(params.id);
+  const resolvedParams = await params;
+  const record = await getShortLink(resolvedParams.id);
   if (!record) {
     return {
       title: "Majnu is Missing",
@@ -79,7 +81,7 @@ export async function generateMetadata(
     openGraph: {
       title,
       description,
-      url: `${SITE_URL}/s/${params.id}`,
+      url: `${SITE_URL}/s/${resolvedParams.id}`,
       type: "article",
       images: [ogImageUrl],
     },
@@ -92,10 +94,29 @@ export async function generateMetadata(
   };
 }
 
-export default async function ShareRedirect({ params }: { params: ShareParams }) {
-  const record = await getShortLink(params.id);
+export default async function ShareRedirect({ params }: { params: Promise<ShareParams> }) {
+  const resolvedParams = await params;
+  const record = await getShortLink(resolvedParams.id);
   if (!record) {
     notFound();
   }
+
+  const headersList = await headers();
+  const userAgent = headersList.get("user-agent") ?? "";
+  const isBot = /twitterbot|facebookexternalhit|slackbot|telegrambot|whatsapp/i.test(userAgent);
+
+  if (isBot) {
+    return (
+      <html>
+        <head>
+          <meta httpEquiv="refresh" content="0;url={record.target}" />
+        </head>
+        <body>
+          <p>Redirecting...</p>
+        </body>
+      </html>
+    );
+  }
+
   redirect(record.target);
 }
