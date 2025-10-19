@@ -3,10 +3,10 @@ import { Bebas_Neue, Geist, Geist_Mono, Inter, Shrikhand } from "next/font/googl
 import "./globals.css";
 import type { Metadata } from "next";
 
-import { SoundProvider } from "@/components/sound/sound-provider";
 import { SoundToggle } from "@/components/sound/sound-toggle";
-import { Toaster } from "@/components/ui/toaster";
-import { UserProvider } from "@/context/user-context";
+import { ErrorBoundary } from "@/lib/errorBoundary";
+import { RouteTransition } from "@/components/route-transition";
+import { ClientProviders } from "@/components/client-providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,9 +36,9 @@ const shrikhand = Shrikhand({
 });
 
 const siteUrl = "https://savemajnu.live";
-const title = "Save Majnu Bhai";
+const title = "Save Majnu Bhai — Feels Real";
 const description =
-  "Bollywood gallows humor. Guess the word in five mistakes or Majnu Bhai swings.";
+  "Bollywood gallows humor tightened for launch. Guess the word in five mistakes or Majnu Bhai swings.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
     siteName: title,
     images: [
       {
-        url: "/og/win.png",
+        url: "/og/win.webp",
         width: 1200,
         height: 630,
         alt: "Majnu Bhai survives the rope.",
@@ -64,7 +64,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title,
     description,
-    images: ["/og/win.png"],
+    images: ["/og/win.webp"],
   },
 };
 
@@ -78,30 +78,31 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${bebas.variable} ${shrikhand.variable} antialiased`}
       >
-        <SoundProvider>
-          <UserProvider>
-            <div className="min-h-screen bg-gradient-to-br from-[#FDF7E4] via-[#FFF9E0] to-[#FFF1CC] text-foreground">
-              <header className="sticky top-0 z-40 border-b border-red/10 bg-white/70 backdrop-blur">
-                <nav className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4">
-                  <Link href="/" className="font-display text-2xl uppercase tracking-[0.3em] text-red">
-                    Save Majnu Bhai
+        <ClientProviders>
+          <div className="min-h-screen bg-gradient-to-br from-[#FDF7E4] via-[#FFF9E0] to-[#FFF1CC] text-foreground">
+            <header className="sticky top-0 z-40 border-b border-red/10 bg-white/70 backdrop-blur">
+              <nav className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4">
+                <Link href="/" className="font-display text-2xl uppercase tracking-[0.3em] text-red">
+                  Save Majnu Bhai
+                </Link>
+                <div className="flex items-center gap-4 text-sm font-medium">
+                  <Link href="/play" className="hover:text-red">
+                    Play
                   </Link>
-                  <div className="flex items-center gap-4 text-sm font-medium">
-                    <Link href="/play" className="hover:text-red">
-                      Play
-                    </Link>
-                    <Link href="/leaderboard" className="hover:text-red">
-                      Leaderboard
-                    </Link>
-                    <SoundToggle />
-                  </div>
-                </nav>
-              </header>
-              <main>{children}</main>
-              <Toaster />
-            </div>
-          </UserProvider>
-        </SoundProvider>
+                  <Link href="/leaderboard" className="hover:text-red">
+                    Leaderboard
+                  </Link>
+                  <SoundToggle />
+                </div>
+              </nav>
+            </header>
+            <main>
+              <RouteTransition>
+                <ErrorBoundary>{children}</ErrorBoundary>
+              </RouteTransition>
+            </main>
+          </div>
+        </ClientProviders>
       </body>
     </html>
   );

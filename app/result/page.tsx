@@ -45,7 +45,7 @@ export default async function ResultPage({
   const throttledParam = asString(params.throttled) === "true";
 
   const outcome: ResultOutcome = statusParam === "won" ? "win" : "loss";
-  const heroImage = outcome === "win" ? "/majnu-states/win.png" : "/majnu-states/loss.png";
+  const heroImage = outcome === "win" ? "/majnu-states/win.webp" : "/majnu-states/loss.webp";
 
   const game = gameId ? await getGameById(gameId) : undefined;
   const stats = game ? await getUserStats(game.user_id) : null;
@@ -54,6 +54,7 @@ export default async function ResultPage({
   const scoreTotal = scoreTotalParam ?? stats?.score_total ?? null;
   const scoreDelta = scoreDeltaParam;
   const rank = rankParam ?? (game ? await getUserRank("weekly", game.user_id) : null);
+  const playerHandle = userRecord?.handle ?? null;
 
   const shareUrl = new URL("/result", SITE_URL);
   if (statusParam) shareUrl.searchParams.set("status", statusParam);
@@ -64,11 +65,16 @@ export default async function ResultPage({
   if (typeof rank === "number") shareUrl.searchParams.set("rank", String(rank));
   if (game?.word_answer) shareUrl.searchParams.set("word", game.word_answer);
   if (throttledParam) shareUrl.searchParams.set("throttled", "true");
+  if (playerHandle) shareUrl.searchParams.set("handle", playerHandle);
+  if (stats) {
+    shareUrl.searchParams.set("wins", String(stats.wins_all));
+    shareUrl.searchParams.set("losses", String(stats.losses_all));
+    shareUrl.searchParams.set("streak", String(stats.streak_current));
+  }
   shareUrl.searchParams.set("utm_source", "twitter");
   shareUrl.searchParams.set("utm_medium", "share");
   shareUrl.searchParams.set("utm_campaign", "v1");
 
-  const playerHandle = userRecord?.handle ?? null;
   const avatar = buildAvatar(playerHandle ?? game?.user_id ?? "majnu");
 
   return (
@@ -103,6 +109,10 @@ export default async function ResultPage({
         scoreTotal,
         rank,
         userId: game?.user_id,
+        handle: playerHandle,
+        wins: stats?.wins_all ?? null,
+        losses: stats?.losses_all ?? null,
+        streak: stats?.streak_current ?? null,
       }}
       throttled={throttledParam}
       playerHandle={playerHandle}

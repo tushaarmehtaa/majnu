@@ -8,6 +8,16 @@ type AnalyticsPayload = {
   metadata?: Record<string, unknown>;
 };
 
+type AnalyticsEntry = {
+  event: string;
+  user: string;
+  timestamp: string;
+  metadata?: string;
+};
+
+const EVENT_LIMIT = 8;
+const eventBuffer: AnalyticsEntry[] = [];
+
 export function setAnalyticsUserId(userId: string) {
   try {
     window.localStorage.setItem(USER_STORAGE_KEY, userId);
@@ -31,13 +41,23 @@ export function logEvent({ event, userId, metadata }: AnalyticsPayload) {
   }
 
   const resolvedUserId = userId ?? getStoredUserId() ?? "anonymous";
-  const payload = {
+  const entry: AnalyticsEntry = {
     event,
-    user_id: resolvedUserId,
+    user: resolvedUserId,
     timestamp: new Date().toISOString(),
-    ...(metadata ? { metadata } : {}),
+    ...(metadata
+      ? {
+          metadata: JSON.stringify(metadata).slice(0, 120),
+        }
+      : {}),
   };
-  console.info("[majnu-metrics]", payload);
+
+  eventBuffer.push(entry);
+  if (eventBuffer.length > EVENT_LIMIT) {
+    eventBuffer.shift();
+  }
+
+  console.table(eventBuffer);
 }
 
 export { USER_STORAGE_KEY };

@@ -5,6 +5,7 @@ import domains from "@/data/domains.json";
 import type { GameStatus } from "@/lib/game";
 import { dateKey, weekKey } from "@/lib/datekeys";
 import { scoreDelta, type GameResult } from "@/lib/score";
+import { logServerError, logServerEvent } from "@/lib/logger";
 
 export type UserRecord = {
   id: string;
@@ -58,6 +59,7 @@ export type LeaderboardListItem = LeaderboardEntry & {
   cursor: string;
   badges: string[];
   updated_at: string;
+  trend?: "up" | "down" | "same";
 };
 
 export type LeaderboardPage = {
@@ -100,6 +102,29 @@ export type ShortLinkRecord = {
   created_at: string;
 };
 
+export type DailyPuzzleRecord = {
+  date_key: string;
+  domain: string;
+  word: string;
+  hint: string;
+  created_at: string;
+};
+
+export type UserStreakRecord = {
+  user_id: string;
+  current_streak: number;
+  best_streak: number;
+  last_play_date: string | null;
+  total_daily_played: number;
+};
+
+type RankSnapshot = {
+  scope_key: string;
+  user_id: string;
+  rank: number;
+  captured_at: string;
+};
+
 type InMemoryInstantDB = {
   users: Map<string, UserRecord>;
   games: Map<string, GameRecord>;
@@ -117,6 +142,9 @@ type InMemoryInstantDB = {
   dailyWords: Map<string, DailySelection>;
   dailyAttempts: Map<string, string>;
   dailyHistory: string[];
+  dailyPuzzles: Map<string, DailyPuzzleRecord>;
+  userStreaks: Map<string, UserStreakRecord>;
+  leaderboardSnapshots: Map<string, RankSnapshot>;
 };
 
 declare global {
@@ -146,6 +174,9 @@ function createStore(): InMemoryInstantDB {
       dailyWords: new Map<string, DailySelection>(),
       dailyAttempts: new Map<string, string>(),
       dailyHistory: [],
+      dailyPuzzles: new Map<string, DailyPuzzleRecord>(),
+      userStreaks: new Map<string, UserStreakRecord>(),
+      leaderboardSnapshots: new Map<string, RankSnapshot>(),
     };
   }
 
@@ -153,6 +184,44 @@ function createStore(): InMemoryInstantDB {
 }
 
 const store = createStore();
+
+function cloneGameRecord(record: GameRecord): GameRecord {
+  return {
+    ...record,
+    guessed_letters: [...record.guessed_letters],
+    wrong_letters: [...record.wrong_letters],
+  };
+}
+
+function cloneUserStatsRecord(record: UserStatsRecord): UserStatsRecord {
+  return { ...record };
+}
+
+function cloneLeaderboardRecord(record: LeaderboardRecord): LeaderboardRecord {
+  return { ...record };
+}
+
+async function withRetries<T>(operation: () => Promise<T>, retries = 2, context: Record<string, unknown> = {}): Promise<T> {
+  let attempt = 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let lastError: any;
+  while (attempt <= retries) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      logServerError("instantdb_retry_error", error, {
+        attempt,
+        ...context,
+      });
+      attempt += 1;
+      if (attempt > retries) {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
 
 export async function getOrCreateAnonymousUser(id?: string): Promise<UserRecord> {
   if (id) {
@@ -260,6 +329,13 @@ export async function createGame({
   };
 
   store.games.set(id, record);
+  logServerEvent("instantdb_create_game", {
+    gameId: id,
+    userId,
+    domain,
+    mode,
+    createdAt: record.created_at,
+  });
   return record;
 }
 
@@ -289,6 +365,13 @@ export async function updateGame(
     ...patch,
   };
   store.games.set(id, updated);
+  logServerEvent("instantdb_update_game", {
+    gameId: id,
+    userId: updated.user_id,
+    status: updated.status,
+    finishedAt: updated.finished_at,
+    patchKeys: Object.keys(patch),
+  });
   return updated;
 }
 
@@ -450,6 +533,16 @@ function upsertLeaderboard(
   updater(record);
   record.updated_at = now();
   map.set(id, record);
+  logServerEvent("instantdb_update_leaderboard", {
+    scope,
+    scopeKey,
+    userId,
+    wins: record.wins,
+    losses: record.losses,
+    score: record.score,
+    streakBest: record.streak_best,
+    updatedAt: record.updated_at,
+  });
 }
 
 export type OnGameFinishResult = {
@@ -561,6 +654,115 @@ export function getDailyAttempt(userId: string, date: string): string | undefine
   return store.dailyAttempts.get(dailyAttemptKey(userId, date));
 }
 
+export function getDailyPuzzle(date: string): DailyPuzzleRecord | undefined {
+  return store.dailyPuzzles.get(date);
+}
+
+export function saveDailyPuzzle(record: DailyPuzzleRecord): DailyPuzzleRecord {
+  store.dailyPuzzles.set(record.date_key, record);
+  return record;
+}
+
+export function ensureDailyPuzzle(date: string): DailyPuzzleRecord {
+  const existing = getDailyPuzzle(date);
+  if (existing) {
+    return existing;
+  }
+
+  const selection = getDailySelection(date);
+  const domainConfig = domains[selection.domain as keyof typeof domains];
+  const record: DailyPuzzleRecord = {
+    date_key: date,
+    domain: selection.domain,
+    word: selection.word,
+    hint: domainConfig?.hint ?? `Clue from ${selection.domain}`,
+    created_at: now(),
+  };
+  saveDailyPuzzle(record);
+  return record;
+}
+
+function streakKey(userId: string): string {
+  return userId;
+}
+
+export function getUserStreakRecord(userId: string): UserStreakRecord {
+  let record = store.userStreaks.get(streakKey(userId));
+  if (!record) {
+    record = {
+      user_id: userId,
+      current_streak: 0,
+      best_streak: 0,
+      last_play_date: null,
+      total_daily_played: 0,
+    };
+    store.userStreaks.set(streakKey(userId), record);
+  }
+  return record;
+}
+
+export function updateUserDailyStreak(userId: string, date: string, result: GameResult): UserStreakRecord {
+  const record = { ...getUserStreakRecord(userId) };
+  const previousDate = record.last_play_date;
+  if (result === "loss" && previousDate === date) {
+    // already recorded today
+    store.userStreaks.set(streakKey(userId), record);
+    return record;
+  }
+
+  if (previousDate) {
+    const prev = new Date(previousDate);
+    const current = new Date(date);
+    const diff = Math.floor((current.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+    if (diff === 1) {
+      record.current_streak += 1;
+    } else if (diff > 1) {
+      record.current_streak = 1;
+    }
+  } else {
+    record.current_streak = 1;
+  }
+
+  if (result === "loss") {
+    record.current_streak = 0;
+  }
+
+  record.best_streak = Math.max(record.best_streak, record.current_streak);
+  record.last_play_date = date;
+  record.total_daily_played += 1;
+  store.userStreaks.set(streakKey(userId), record);
+  return record;
+}
+
+function snapshotKey(scopeKey: string, userId: string): string {
+  return `${scopeKey}:${userId}`;
+}
+
+function recordRankSnapshot(scopeKey: string, userId: string, rank: number) {
+  const key = snapshotKey(scopeKey, userId);
+  store.leaderboardSnapshots.set(key, {
+    scope_key: scopeKey,
+    user_id: userId,
+    rank,
+    captured_at: now(),
+  });
+}
+
+function resolveRankTrend(scopeKey: string, userId: string, currentRank: number | null): "up" | "down" | "same" | undefined {
+  if (currentRank == null) {
+    return undefined;
+  }
+  const previous = store.leaderboardSnapshots.get(snapshotKey(scopeKey, userId));
+  if (!previous) {
+    recordRankSnapshot(scopeKey, userId, currentRank);
+    return undefined;
+  }
+
+  const trend = previous.rank === currentRank ? "same" : previous.rank > currentRank ? "up" : "down";
+  recordRankSnapshot(scopeKey, userId, currentRank);
+  return trend;
+}
+
 export type GameFinishSnapshot = {
   game: GameRecord;
   scoreDelta: number;
@@ -608,31 +810,90 @@ export async function finalizeGame(
     store.gameFinishes.set(gameId, snapshot);
     return snapshot;
   }
+  const activeGame = cloneGameRecord(game);
 
-  const finishedAt = patch.finished_at ?? now();
-  const updated = await updateGame(gameId, {
-    ...patch,
-    status: result === "win" ? "won" : "lost",
-    finished_at: finishedAt,
-  });
+  const attemptFinalize = async (): Promise<GameFinishSnapshot> => {
+    const finishedAt = patch.finished_at ?? now();
+    const finishedDate = new Date(finishedAt);
 
-  const finishResult = await onGameFinish(
-    updated.id,
-    result,
-    updated.user_id,
-    new Date(finishedAt),
-  );
-  const finalGame = (await getGameById(gameId)) ?? updated;
-  const snapshot: GameFinishSnapshot = {
-    game: finalGame,
-    scoreDelta: finishResult.scoreDelta,
-    scoreTotal: finishResult.stats.score_total,
-    throttled: finishResult.throttled,
-    requiresHandle: finishResult.requiresHandle,
-    achievements: finishResult.achievements,
+    const originalGame = cloneGameRecord(activeGame);
+    const existingStats = store.userStats.get(activeGame.user_id);
+    const statsBackup = existingStats ? cloneUserStatsRecord(existingStats) : null;
+
+    const dailyKey = leaderboardKey(dateKey(finishedDate), activeGame.user_id);
+    const weeklyKey = leaderboardKey(weekKey(finishedDate), activeGame.user_id);
+    const existingDaily = store.leaderboardsDaily.get(dailyKey);
+    const dailyBackup = existingDaily ? cloneLeaderboardRecord(existingDaily) : null;
+    const existingWeekly = store.leaderboardsWeekly.get(weeklyKey);
+    const weeklyBackup = existingWeekly ? cloneLeaderboardRecord(existingWeekly) : null;
+    const finishBackup = store.gameFinishes.get(gameId);
+
+    try {
+      const updated = await updateGame(gameId, {
+        ...patch,
+        status: result === "win" ? "won" : "lost",
+        finished_at: finishedAt,
+      });
+
+      const finishResult = await onGameFinish(
+        updated.id,
+        result,
+        updated.user_id,
+        finishedDate,
+      );
+
+      const finalGame = (await getGameById(gameId)) ?? updated;
+      if (finalGame.mode === "daily") {
+        updateUserDailyStreak(finalGame.user_id, dateKey(finishedDate), result);
+      }
+      const snapshot: GameFinishSnapshot = {
+        game: finalGame,
+        scoreDelta: finishResult.scoreDelta,
+        scoreTotal: finishResult.stats.score_total,
+        throttled: finishResult.throttled,
+        requiresHandle: finishResult.requiresHandle,
+        achievements: finishResult.achievements,
+      };
+
+      store.gameFinishes.set(gameId, snapshot);
+      logServerEvent("instantdb_finalize_game", {
+        gameId,
+        userId: finalGame.user_id,
+        result,
+        finishedAt,
+      });
+
+      return snapshot;
+    } catch (error) {
+      store.games.set(gameId, originalGame);
+      if (statsBackup) {
+        store.userStats.set(activeGame.user_id, statsBackup);
+      } else {
+        store.userStats.delete(activeGame.user_id);
+      }
+      if (dailyBackup) {
+        store.leaderboardsDaily.set(dailyKey, dailyBackup);
+      } else {
+        store.leaderboardsDaily.delete(dailyKey);
+      }
+      if (weeklyBackup) {
+        store.leaderboardsWeekly.set(weeklyKey, weeklyBackup);
+      } else {
+        store.leaderboardsWeekly.delete(weeklyKey);
+      }
+      if (finishBackup) {
+        store.gameFinishes.set(gameId, finishBackup);
+      } else {
+        store.gameFinishes.delete(gameId);
+      }
+      throw error;
+    }
   };
-  store.gameFinishes.set(gameId, snapshot);
-  return snapshot;
+
+  return withRetries(() => attemptFinalize(), 2, {
+    gameId,
+    result,
+  });
 }
 
 export async function onGameFinish(
@@ -695,6 +956,16 @@ export async function onGameFinish(
   stats.score_total += delta;
   stats.updated_at = now();
   store.userStats.set(userId, stats);
+  logServerEvent("instantdb_update_stats", {
+    userId,
+    result,
+    scoreTotal: stats.score_total,
+    wins: stats.wins_all,
+    losses: stats.losses_all,
+    streakCurrent: stats.streak_current,
+    streakBest: stats.streak_best,
+    finishedAt: finishedAt.toISOString(),
+  });
 
   const scopeDate = finishedAt;
   const dailyKey = dateKey(scopeDate);
@@ -797,10 +1068,12 @@ function computeBadges(userId: string, stats: UserStatsRecord): string[] {
 function formatLeaderboardItem(
   record: LeaderboardRecord,
   rank: number,
+  scopeKey: string,
 ): LeaderboardListItem {
   const user = store.users.get(record.user_id);
   const stats = getOrCreateUserStats(record.user_id);
   const badges = computeBadges(record.user_id, stats);
+  const trend = resolveRankTrend(scopeKey, record.user_id, rank);
 
   return {
     cursor: record.id,
@@ -813,6 +1086,7 @@ function formatLeaderboardItem(
     rank,
     badges,
     updated_at: record.updated_at,
+    trend,
   };
 }
 
@@ -839,24 +1113,34 @@ export async function getLeaderboard(
 
   let startIndex = 0;
   if (cursor) {
-    const cursorIndex = sorted.findIndex((record) => record.id === cursor);
-    if (cursorIndex >= 0) {
-      startIndex = cursorIndex + 1;
+    const [ts, cursorId] = cursor.split("::");
+    const cursorTime = Date.parse(ts);
+    if (cursorId) {
+      const cursorIndex = sorted.findIndex((record) => record.id === cursorId);
+      if (cursorIndex >= 0) {
+        startIndex = cursorIndex + 1;
+      } else if (!Number.isNaN(cursorTime)) {
+        const nextIndex = sorted.findIndex((record) => Date.parse(record.updated_at) > cursorTime);
+        startIndex = nextIndex >= 0 ? nextIndex : sorted.length;
+      }
+    } else if (!Number.isNaN(cursorTime)) {
+      const nextIndex = sorted.findIndex((record) => Date.parse(record.updated_at) > cursorTime);
+      startIndex = nextIndex >= 0 ? nextIndex : sorted.length;
     }
   }
 
   const slice = sorted.slice(startIndex, startIndex + limit);
   const items = slice.map((record, index) =>
-    formatLeaderboardItem(record, startIndex + index + 1),
+    formatLeaderboardItem(record, startIndex + index + 1, scopeKey),
   );
 
   const nextRecord = sorted[startIndex + limit];
-  const nextCursor = nextRecord ? nextRecord.id : undefined;
+  const nextCursor = nextRecord ? `${nextRecord.updated_at}::${nextRecord.id}` : undefined;
 
   let userEntry: LeaderboardListItem | null = null;
   const userIndex = sorted.findIndex((record) => record.user_id === userId);
   if (userIndex >= 0) {
-    userEntry = formatLeaderboardItem(sorted[userIndex], userIndex + 1);
+    userEntry = formatLeaderboardItem(sorted[userIndex], userIndex + 1, scopeKey);
   }
 
   return {

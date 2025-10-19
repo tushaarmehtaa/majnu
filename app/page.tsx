@@ -1,43 +1,111 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { COPY } from "@/lib/copy";
+import { preloadDomains } from "@/hooks/use-domains";
+import { useOffline } from "@/hooks/use-offline";
+import { logEvent } from "@/lib/analytics";
 
 export default function LandingPage() {
+  const router = useRouter();
   const [topPlayers, setTopPlayers] = useState<
     Array<{ cursor: string; rank: number; handle: string | null; score: number }>
   >([]);
   const [topLoading, setTopLoading] = useState(true);
+  const [topError, setTopError] = useState<string | null>(null);
+  const { offline } = useOffline();
+  const TOP_CACHE_KEY = "majnu-top-daily";
 
-  useEffect(() => {
-    let isMounted = true;
-    async function fetchTop() {
-      try {
-        const response = await fetch("/api/leaderboard?scope=daily&limit=3", {
-          cache: "no-store",
-        });
-        if (!response.ok) return;
-        const payload = await response.json();
-        if (!isMounted) return;
-        setTopPlayers(payload.items ?? []);
-      } finally {
-        if (isMounted) {
-          setTopLoading(false);
+  const fetchTop = useCallback(async () => {
+    if (offline) {
+      setTopError(COPY.game.offline.description);
+      setTopLoading(false);
+      if (typeof window !== "undefined") {
+        try {
+          const cached = window.localStorage.getItem(TOP_CACHE_KEY);
+          if (cached) {
+            const parsed = JSON.parse(cached) as Array<{ cursor: string; rank: number; handle: string | null; score: number }>;
+            setTopPlayers(parsed);
+          }
+        } catch {
+          // ignore cache read errors
         }
       }
+      return;
     }
 
+    setTopLoading(true);
+    setTopError(null);
+
+    try {
+      const response = await fetch("/api/leaderboard?scope=daily&limit=3", {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load leaderboard (${response.status})`);
+      }
+      const payload = await response.json();
+      setTopPlayers(payload.items ?? []);
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(TOP_CACHE_KEY, JSON.stringify(payload.items ?? []));
+        } catch {
+          // ignore cache errors
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load leaderboard";
+      setTopError(message);
+      logEvent({
+        event: "error",
+        metadata: {
+          source: "landing_leaderboard",
+          message,
+        },
+      });
+      if (typeof window !== "undefined") {
+        try {
+          const cached = window.localStorage.getItem(TOP_CACHE_KEY);
+          if (cached) {
+            const parsed = JSON.parse(cached) as Array<{ cursor: string; rank: number; handle: string | null; score: number }>;
+            setTopPlayers(parsed);
+          } else {
+            setTopPlayers([]);
+          }
+        } catch {
+          setTopPlayers([]);
+        }
+      } else {
+        setTopPlayers([]);
+      }
+    } finally {
+      setTopLoading(false);
+    }
+  }, [TOP_CACHE_KEY, offline]);
+
+  useEffect(() => {
     fetchTop();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    preloadDomains().catch(() => null);
+    try {
+      router.prefetch("/play");
+      router.prefetch("/leaderboard");
+    } catch {
+      // ignore prefetch errors in development
+    }
+  }, [fetchTop, router]);
+
+  useEffect(() => {
+    if (!offline && topError) {
+      fetchTop().catch(() => null);
+    }
+  }, [fetchTop, offline, topError]);
 
   return (
     <motion.main
@@ -48,7 +116,7 @@ export default function LandingPage() {
     >
       <div className="pointer-events-none absolute inset-0 -z-10 flex items-start justify-center opacity-10">
         <Image
-          src="/majnu-states/1.png"
+          src="/majnu-states/1.webp"
           alt="Majnu watermark"
           width={420}
           height={380}
@@ -103,6 +171,23 @@ export default function LandingPage() {
           </div>
           {topLoading ? (
             <p className="text-foreground/60">Fetching fresh dangling heroes...</p>
+          ) : topError ? (
+            <div className="flex flex-col items-start gap-3 text-foreground/70">
+              <p>{COPY.landing.leaderboardError}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red/40 text-red hover:bg-red/10"
+                  onClick={() => {
+                    fetchTop().catch(() => null);
+                  }}
+                >
+                  {COPY.landing.leaderboardRetry}
+                </Button>
+                <span className="text-xs text-foreground/60">{topError}</span>
+              </div>
+            </div>
           ) : topPlayers.length === 0 ? (
             <p className="text-foreground/60">No wins logged yet. Claim the rope first.</p>
           ) : (

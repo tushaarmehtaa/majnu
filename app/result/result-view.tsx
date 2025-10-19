@@ -35,6 +35,10 @@ type ResultViewProps = {
     scoreTotal: number | null;
     rank: number | null;
     userId?: string;
+    handle?: string | null;
+    wins?: number | null;
+    losses?: number | null;
+    streak?: number | null;
   };
   throttled?: boolean;
   playerHandle?: string | null;
@@ -57,6 +61,7 @@ export function ResultView({
   const headlineBadge = outcome === "win" ? "bg-success/20 text-success" : "bg-red/20 text-red";
   const title = outcome === "win" ? COPY.result.title.win : COPY.result.title.loss;
   const description = outcome === "win" ? COPY.result.winDescription : COPY.result.lossDescription;
+  const subtitle = outcome === "win" ? COPY.result.subtitle.win : COPY.result.subtitle.loss;
 
   return (
     <div className="relative">
@@ -89,6 +94,9 @@ export function ResultView({
               <h1 className="font-display text-4xl uppercase tracking-[0.2em] text-red sm:text-5xl">
                 {title}
               </h1>
+              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-foreground/50">
+                {subtitle}
+              </p>
               <p className="text-base text-foreground/80">{description}</p>
               {streak ? (
                 <div className="grid gap-2 text-xs uppercase tracking-[0.3em] text-foreground/60 sm:grid-cols-2">
@@ -175,6 +183,10 @@ export function ResultView({
               rank={share.rank}
               shareUrl={share.url}
               userId={share.userId}
+              handle={share.handle}
+              wins={share.wins}
+              losses={share.losses}
+              streak={share.streak}
             />
             <Button variant="outline" className="border-red/40 text-red hover:bg-red/10" asChild>
               <Link href="/leaderboard">View Leaderboards</Link>

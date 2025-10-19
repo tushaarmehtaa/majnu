@@ -1,8 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo } from "react";
 
 import { soundManager } from "@/lib/soundManager";
+import { useUIStore } from "@/lib/stores/ui-store";
+import { useIsClient } from "@/hooks/use-is-client";
 
 type SoundContextValue = {
   muted: boolean;
@@ -10,34 +12,22 @@ type SoundContextValue = {
   toggleMuted: () => void;
 };
 
-const STORAGE_KEY = "majnu-sound-muted";
-
 const SoundContext = createContext<SoundContextValue | null>(null);
 
 export function SoundProvider({ children }: { children: React.ReactNode }) {
-  const [muted, setMuted] = useState<boolean>(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      return stored === "true";
-    } catch (error) {
-      console.warn("Unable to read sound preference", error);
-      return false;
-    }
-  });
+  const isClient = useIsClient();
+  const muted = useUIStore((state) => state.muted);
+  const toggleMuted = useUIStore((state) => state.toggleMuted);
 
   useEffect(() => {
+    if (!isClient) {
+      return;
+    }
     soundManager.setMuted(muted);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, String(muted));
-    } catch (error) {
-      console.warn("Unable to persist sound preference", error);
-    }
-  }, [muted]);
+  }, [isClient, muted]);
 
   useEffect(() => {
+    if (!isClient) return;
     if (typeof window === "undefined") return;
 
     const unlockAndPreload = async () => {
@@ -55,11 +45,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("pointerdown", unlockAndPreload);
       window.removeEventListener("keydown", unlockAndPreload);
     };
-  }, []);
-
-  const toggleMuted = useCallback(() => {
-    setMuted((previous) => !previous);
-  }, []);
+  }, [isClient]);
 
   const value = useMemo<SoundContextValue>(
     () => ({

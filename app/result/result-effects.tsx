@@ -21,7 +21,7 @@ type ConfettiPiece = {
 const CONFETTI_COLORS = ["#F97316", "#22C55E", "#FACC15", "#EF4444", "#38BDF8"];
 
 export function ResultEffects({ outcome }: ResultEffectsProps) {
-  const { play } = useSound(outcome === "win" ? "/sfx/win.mp3" : "/sfx/loss.mp3", {
+  const { play } = useSound(outcome === "win" ? "/audio/win.mp3" : "/audio/loss.mp3", {
     volume: outcome === "win" ? 0.85 : 0.9,
   });
 

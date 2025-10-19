@@ -15,10 +15,10 @@ describe("game mechanics", () => {
     expect(masked).toBe("______");
 
     const withG = reveal(masked, answer, "g");
-    expect(withG).toBe("___g_e");
+    expect(withG).toBe("____g_");
 
     const withR = reveal(withG, answer, "r");
-    expect(withR).toBe("_r_g_e");
+    expect(withR).toBe("_r__g_");
   });
 
   it("detects win only when mask matches answer", () => {

@@ -1,9 +1,9 @@
-import curatedHints from "@/data/hints.json";
 import {
   getCachedHint,
   saveHint,
   type HintRecord,
 } from "@/lib/instantdb";
+import { getCachedHints, loadHints, primeHints, type HintDomainRecord, type HintsMap } from "@/lib/static-data";
 
 type GenerateHintInput = {
   word: string;
@@ -16,15 +16,15 @@ type GenerateHintResult = {
 };
 
 const FALLBACK_HINTS: Record<string, string> = {
-  bollywood: "A film term",
-  cinema: "A film term",
-  movies: "A film term",
-  startups: "A startup term",
-  web: "A web term",
-  webdev: "A web term",
-  "web dev": "A web term",
-  crypto: "An onchain term",
-  fitness: "A training term",
+  bollywood: "Think cult Bollywood chaos",
+  cinema: "Think cult Bollywood chaos",
+  movies: "Think cult Bollywood chaos",
+  startups: "Boardroom buzzword for founders",
+  web: "A tool used on the modern web",
+  webdev: "A tool used on the modern web",
+  "web dev": "A tool used on the modern web",
+  crypto: "Something the on-chain crowd says",
+  fitness: "Gym-lingo you hear from trainers",
 };
 
 const HINT_MIN_LENGTH = 5;
@@ -33,8 +33,19 @@ function normaliseKey(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function lookupCurated(domain: string, word: string): string | undefined {
-  const domainHints = (curatedHints as Record<string, Record<string, string>>)[domain];
+async function resolveCuratedHints(): Promise<HintsMap> {
+  const cached = getCachedHints();
+  if (cached) {
+    return cached;
+  }
+  const loaded = await loadHints();
+  primeHints(loaded);
+  return loaded;
+}
+
+async function lookupCurated(domain: string, word: string): Promise<string | undefined> {
+  const hints = await resolveCuratedHints();
+  const domainHints: HintDomainRecord | undefined = hints[domain];
   if (!domainHints) return undefined;
   return domainHints[word];
 }
@@ -100,10 +111,9 @@ async function fetchOpenAIHint(domain: string, word: string): Promise<string | n
 
 function fallbackHint(domain: string, word: string): string {
   const domainKey = normaliseKey(domain);
-  if (FALLBACK_HINTS[domainKey]) {
-    return FALLBACK_HINTS[domainKey];
-  }
-  return `Clue from ${domain} without naming ${word.length}-letters.`;
+  const base = FALLBACK_HINTS[domainKey];
+  const descriptor = base ?? `A clue pulled from ${domainKey}`;
+  return `${descriptor}. ${word.length}-letter answer.`;
 }
 
 export async function generateHintForWord({
@@ -113,7 +123,7 @@ export async function generateHintForWord({
   const normalizedDomain = normaliseKey(domain);
   const normalizedWord = normaliseKey(word);
 
-  const curated = lookupCurated(normalizedDomain, normalizedWord);
+  const curated = await lookupCurated(normalizedDomain, normalizedWord);
   if (curated) {
     await cacheHint(normalizedDomain, normalizedWord, curated);
     return { hint: curated, source: "curated" };

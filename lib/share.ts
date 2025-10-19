@@ -1,17 +1,3 @@
-const WIN_COPY = [
-  "i saved majnu bhai. score +{delta}. rank #{rank}.",
-  "rope missed. i live to tell. score {total}.",
-];
-
-const LOSS_COPY = [
-  "majnu is gone. i failed. rank #{rank}.",
-  "i could not save him. try your luck.",
-];
-
-function pickRandom<T>(items: T[]): T {
-  return items[Math.floor(Math.random() * items.length)];
-}
-
 function safeValue(value: number | null | undefined, fallback: string): string {
   if (typeof value === "number" && Number.isFinite(value)) {
     return String(value);
@@ -19,32 +5,27 @@ function safeValue(value: number | null | undefined, fallback: string): string {
   return fallback;
 }
 
-function formatDelta(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "0";
-  }
-  if (value === 0) return "0";
-  return value > 0 ? `+${value}` : String(value);
-}
-
 export type ShareContext = {
   outcome: "win" | "loss";
   scoreDelta: number | null | undefined;
   scoreTotal: number | null | undefined;
   rank: number | null | undefined;
+  handle: string | null | undefined;
+  wins: number | null | undefined;
+  losses: number | null | undefined;
+  streak: number | null | undefined;
 };
 
 export function buildShareCopy(context: ShareContext): string {
-  const pool = context.outcome === "win" ? WIN_COPY : LOSS_COPY;
-  const template = pickRandom(pool);
+  const saved = context.outcome === "win";
+  const handle = context.handle ? context.handle.replace(/^@?/, "@") : "@anon";
+  const wins = safeValue(context.wins, "0");
+  const losses = safeValue(context.losses, "0");
+  const streak = safeValue(context.streak, "0");
+  const score = safeValue(context.scoreTotal, "0");
+  const delta = safeValue(context.scoreDelta, "0");
   const rank = safeValue(context.rank, "unranked");
-  const total = safeValue(context.scoreTotal, "0");
-  const delta = formatDelta(context.scoreDelta);
-
-  return template
-    .replace("{rank}", rank)
-    .replace("{total}", total)
-    .replace("{delta}", delta);
+  const subject = saved ? `Majnu Bhai was saved today by ${handle}.` : `Majnu Bhai couldn't be saved today.`;
+  const summary = `Score ${score} (Δ${delta}) · Rank ${rank} · Wins ${wins} · Losses ${losses} · Streak ${streak}.`;
+  return `${subject} ${summary}`;
 }
-
-export { WIN_COPY, LOSS_COPY };

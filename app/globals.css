@@ -3,33 +3,33 @@
 @tailwind utilities;
 
 :root {
-  --background: 40 68% 95%;
-  --foreground: 0 0% 12%;
+  --background: 11 100% 96%;
+  --foreground: 12 15% 15%;
 
-  --card: 40 68% 95%;
-  --card-foreground: 0 0% 12%;
+  --card: 11 100% 96%;
+  --card-foreground: 12 15% 15%;
 
-  --popover: 40 68% 95%;
-  --popover-foreground: 0 0% 12%;
+  --popover: 11 100% 96%;
+  --popover-foreground: 12 15% 15%;
 
-  --primary: 4 62% 48%;
-  --primary-foreground: 40 68% 95%;
+  --primary: 3 78% 54%;
+  --primary-foreground: 26 100% 98%;
 
-  --secondary: 36 90% 80%;
-  --secondary-foreground: 0 0% 12%;
+  --secondary: 11 80% 88%;
+  --secondary-foreground: 12 15% 15%;
 
-  --muted: 36 90% 80%;
-  --muted-foreground: 0 0% 12%;
+  --muted: 11 60% 90%;
+  --muted-foreground: 12 15% 15%;
 
-  --accent: 4 62% 48%;
-  --accent-foreground: 40 68% 95%;
+  --accent: 3 78% 54%;
+  --accent-foreground: 26 100% 98%;
 
-  --destructive: 4 62% 48%;
-  --destructive-foreground: 40 68% 95%;
+  --destructive: 3 78% 54%;
+  --destructive-foreground: 26 100% 98%;
 
-  --border: 0 0% 12%;
-  --input: 0 0% 12%;
-  --ring: 4 62% 48%;
+  --border: 11 30% 80%;
+  --input: 12 15% 15%;
+  --ring: 3 78% 54%;
 
   --chart-1: 36 90% 80%;
   --chart-2: 139 55% 45%;
@@ -83,5 +83,28 @@
 
   body {
     @apply bg-background font-sans text-foreground;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(rgba(224, 60, 49, 0.05) 1px, transparent 1px),
+      radial-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+    background-size: 80px 80px, 120px 120px;
+    mix-blend-mode: multiply;
+    opacity: 0.4;
+    z-index: -1;
+  }
+}
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(1.2deg);
   }
 }

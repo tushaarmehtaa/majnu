@@ -1,8 +1,8 @@
 const SOUND_SOURCES = [
-  "/sfx/correct-guess.mp3",
-  "/sfx/wrong-guess.mp3",
-  "/sfx/win.mp3",
-  "/sfx/loss.mp3",
+  "/audio/correct-guess.mp3",
+  "/audio/wrong-guess.mp3",
+  "/audio/win.mp3",
+  "/audio/loss.mp3",
 ];
 
 type AudioContextType = AudioContext;
@@ -96,11 +96,17 @@ class SoundManager {
     node.buffer = buffer;
 
     const volumeNode = ctx.createGain();
-    volumeNode.gain.value = Math.max(0, Math.min(1, volume));
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+    const currentTime = ctx.currentTime;
+    volumeNode.gain.setValueAtTime(0, currentTime);
+    volumeNode.gain.linearRampToValueAtTime(clampedVolume, currentTime + 0.08);
+    volumeNode.gain.setValueAtTime(clampedVolume, currentTime + Math.max(0, buffer.duration - 0.12));
+    volumeNode.gain.linearRampToValueAtTime(0.0001, currentTime + buffer.duration);
     node.connect(volumeNode);
     volumeNode.connect(this.gainNode ?? ctx.destination);
-    
-    node.start(0);
+
+    node.start(currentTime);
+    node.stop(currentTime + buffer.duration + 0.05);
   }
 
   private async getBuffer(source: string): Promise<AudioBuffer | null> {

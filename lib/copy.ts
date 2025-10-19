@@ -3,14 +3,16 @@ export const COPY = {
     title: "Save Majnu Bhai",
     subtitle: "Guess the word. Save the man.",
     line: "Five wrong guesses and he swings.",
-    cta: "Start the execution",
+    cta: "🔥 Start the execution",
     secondary: "View leaderboards",
-    dailyChip: "Daily Word · +2 Bonus",
+    dailyChip: "Daily Word • +2 bonus",
     highlights: [
       "Dark-comedy hangman with Bollywood flair.",
       "Anonymous play. No accounts. All execution.",
       "Leaderboards remember the saviors. And the fallen.",
     ],
+    leaderboardError: "Could not fetch today's saviors.",
+    leaderboardRetry: "Retry leaderboard",
   },
   game: {
     wrongBar: (current: number, max: number) => `Wrong guesses: ${current} / ${max}`,
@@ -18,10 +20,19 @@ export const COPY = {
     dailyHint: "Daily word. One shot. Resets at 00:00 UTC.",
     dailyLabel: "Daily Word",
     domainPlaceholder: "Pick a domain to play",
+    domainUnavailable: {
+      title: "Majnu is fetching domains",
+      description: "Hang tight a second and try again.",
+    },
+    offline: {
+      title: "Majnu waits patiently.",
+      description: "No internet detected. Try again once you're back online.",
+    },
     domainCard: {
       title: "Choose Majnu's fate",
       description: "Pick a preset domain or whisper a new topic. Every letter counts toward the gallows.",
       emptyHint: "Pick a domain chip to start a new execution.",
+      loadError: "Domains failed to load. Refresh and try again.",
     },
     keyboard: {
       tipBefore: "Tip: Highlight a domain chip and smash",
@@ -100,13 +111,17 @@ export const COPY = {
       win: "Majnu survived.",
       loss: "Majnu is dead.",
     },
+    subtitle: {
+      win: "Majnu breathes again.",
+      loss: "You hesitated. He didn’t.",
+    },
     answerLabel: (word: string) => `Correct word: ${word.toUpperCase()}`,
     winDescription: "The don nods. You bought Majnu time.",
     lossDescription: "The knot snapped tight. Try again, executioner.",
   },
   leaderboard: {
     title: "Top saviors",
-    subtitle: "Wins earn +3, losses shave off 1. Survive consecutive rounds to stack streak bonuses.",
+    subtitle: "Wins earn +3 | Losses –1 | Keep Majnu alive for streak bonus.",
     reset: (time: string) => `Resets in ${time}`,
     weeklyBanner: (count: number) => `This week's saviors saved Majnu ${count} times.`,
     profileCard: {

@@ -1,14 +1,12 @@
 "use client";
 
 import { Suspense } from "react";
-import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
-import confetti from "canvas-confetti";
 
-import domains from "@/data/domains.json";
 import { MAX_WRONG_GUESSES, type GameStatus } from "@/lib/game";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,9 +34,13 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { COPY } from "@/lib/copy";
 import { useSound } from "@/hooks/use-sound";
+import { useOffline } from "@/hooks/use-offline";
+import { useDomains } from "@/hooks/use-domains";
 import { logEvent, setAnalyticsUserId } from "@/lib/analytics";
 import { useUser } from "@/context/user-context";
 import type { AchievementRecord } from "@/lib/instantdb";
+import { useUIStore } from "@/lib/stores/ui-store";
+import { findCachedHint, rememberHint } from "@/lib/client-hint-cache";
 
 type GameState = {
   gameId: string;
@@ -77,7 +79,7 @@ const STORAGE_KEY = "majnu-active-game";
 const LETTERS = Array.from({ length: 26 }, (_, index) =>
   String.fromCharCode(65 + index),
 );
-const MAJNU_FRAMES = ["0.png", "1.png", "2.png", "3.png", "4.png", "5.png"] as const;
+const MAJNU_FRAMES = ["0.webp", "1.webp", "2.webp", "3.webp", "4.webp", "5.webp"] as const;
 
 const TOTAL_HEARTS = MAX_WRONG_GUESSES;
 
@@ -92,7 +94,14 @@ function PlayPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { promptHandle, refresh, user } = useUser();
+  const { promptHandle, refresh } = useUser();
+  const { domains, loading: domainsLoading, error: domainsError } = useDomains();
+  const { offline } = useOffline();
+  const [startError, setStartError] = useState<{ domain: string; message: string } | null>(null);
+  const setActiveGame = useUIStore((state) => state.setActiveGame);
+  const resetGameEffects = useUIStore((state) => state.resetGameEffects);
+  const markConfettiPlayed = useUIStore((state) => state.markConfettiPlayed);
+  const confettiPlayedFor = useUIStore((state) => state.confettiPlayedFor);
   const [activeTab, setActiveTab] = useState<"domain" | "game">("domain");
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [game, setGame] = useState<GameState | null>(null);
@@ -102,17 +111,35 @@ function PlayPageContent() {
   const [isHydrating, setIsHydrating] = useState(true);
   const [hydrationError, setHydrationError] = useState<string | null>(null);
   const [flashingLetter, setFlashingLetter] = useState<string | null>(null);
-  const confettiFiredRef = useRef(false);
   const autoDailyTriggerRef = useRef(false);
-  const { play: playCorrect } = useSound("/sfx/correct-guess.mp3");
-  const { play: playWrong } = useSound("/sfx/wrong-guess.mp3");
-  const { play: playWin } = useSound("/sfx/win.mp3", { volume: 0.85 });
-  const { play: playLoss } = useSound("/sfx/loss.mp3", { volume: 0.9 });
+  const { play: playCorrect } = useSound("/audio/correct-guess.mp3");
+  const { play: playWrong } = useSound("/audio/wrong-guess.mp3");
+  const { play: playWin } = useSound("/audio/win.mp3", { volume: 0.85 });
+  const { play: playLoss } = useSound("/audio/loss.mp3", { volume: 0.9 });
+  const triggerConfetti = useCallback(async () => {
+    const { default: confetti } = await import("canvas-confetti");
+    confetti({
+      particleCount: 120,
+      spread: 70,
+      origin: { y: 0.7 },
+      ticks: 80,
+      startVelocity: 38,
+      scalar: 0.9,
+    });
+  }, []);
 
   const domainEntries = useMemo(
-    () => Object.entries(domains) as [string, { hint: string; words: string[] } ][],
-    [],
+    () => (domains ? (Object.entries(domains) as [string, { hint: string; words: string[] } ][]) : []),
+    [domains],
   );
+
+  const selectedDomainHint = useMemo(() => {
+    if (!selectedDomain || domainEntries.length === 0) {
+      return null;
+    }
+    const entry = domainEntries.find(([key]) => key === selectedDomain);
+    return entry?.[1].hint ?? null;
+  }, [domainEntries, selectedDomain]);
 
   const formattedDomain = useMemo(() => {
     if (game?.mode === "daily" || selectedDomain === "daily") {
@@ -164,15 +191,15 @@ function PlayPageContent() {
 
       if (state.status === "won") {
         playWin();
-        if (!confettiFiredRef.current) {
-          confetti({ particleCount: 120, spread: 70, origin: { y: 0.7 } });
-          confettiFiredRef.current = true;
+        if (state.gameId && confettiPlayedFor !== state.gameId) {
+          triggerConfetti().catch(() => null);
+          markConfettiPlayed(state.gameId);
         }
       } else if (state.status === "lost") {
         playLoss();
       }
       logEvent({
-        event: state.status === "won" ? "game_win" : "game_loss",
+        event: state.status === "won" ? "win" : "loss",
         userId: state.userId,
         metadata: {
           game_id: state.gameId,
@@ -189,6 +216,18 @@ function PlayPageContent() {
         title,
         description,
       });
+
+      if (state.word_answer) {
+        const cached = findCachedHint(state.domain, state.word_answer);
+        rememberHint(state.domain, state.word_answer, state.hint);
+        if (cached) {
+          console.debug(
+            `[hint-cache] ${state.domain}:${state.word_answer} last fetched ${cached.minutesAgo} mins ago`,
+          );
+        } else {
+          console.debug(`[hint-cache] cached ${state.domain}:${state.word_answer}`);
+        }
+      }
 
       if (state.throttled) {
         toast({
@@ -238,7 +277,7 @@ function PlayPageContent() {
 
       router.push(`/result?${searchParams.toString()}`);
     },
-    [playLoss, playWin, promptHandle, refresh, router, toast],
+    [confettiPlayedFor, markConfettiPlayed, playLoss, playWin, promptHandle, refresh, router, toast, triggerConfetti],
   );
 
   const syncLocalStorage = useCallback((state: GameState | null) => {
@@ -259,10 +298,36 @@ function PlayPageContent() {
         return;
       }
 
+      if (offline) {
+        setStartError({ domain: domainKey, message: COPY.game.offline.description });
+        toast({
+          title: COPY.game.offline.title,
+          description: COPY.game.offline.description,
+          variant: "destructive",
+        });
+        logEvent({
+          event: "error",
+          metadata: {
+            source: "new_game_offline",
+            domain: domainKey,
+          },
+        });
+        return;
+      }
+
+      if (!domains || !domains[domainKey]) {
+        toast({
+          title: COPY.game.domainUnavailable.title,
+          description: COPY.game.domainUnavailable.description,
+        });
+        return;
+      }
+
       try {
         setIsStarting(true);
         setPendingDomain(domainKey);
         setSelectedDomain(domainKey);
+        setStartError(null);
 
         const response = await fetch("/api/new-game", {
           method: "POST",
@@ -301,7 +366,8 @@ function PlayPageContent() {
         };
 
         setGame(nextState);
-        confettiFiredRef.current = false;
+        setActiveGame(nextState.gameId);
+        resetGameEffects();
         setActiveTab("game");
         setSelectedDomain(payload.domain ?? domainKey);
         syncLocalStorage(nextState);
@@ -325,21 +391,45 @@ function PlayPageContent() {
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Unable to start game";
+        setStartError({ domain: domainKey, message });
         toast({
           title: COPY.game.startError.title,
           description: COPY.game.startError.description(message),
           variant: "destructive",
+        });
+        logEvent({
+          event: "error",
+          metadata: {
+            source: "new_game",
+            domain: domainKey,
+            message,
+          },
         });
       } finally {
         setIsStarting(false);
         setPendingDomain(null);
       }
     },
-    [game, isStarting, syncLocalStorage, toast, user],
+    [domains, isStarting, offline, resetGameEffects, setActiveGame, syncLocalStorage, toast],
   );
 
   const beginDailyGame = useCallback(async () => {
     if (isStarting) {
+      return;
+    }
+
+    if (offline) {
+      toast({
+        title: COPY.game.offline.title,
+        description: COPY.game.offline.description,
+        variant: "destructive",
+      });
+      logEvent({
+        event: "error",
+        metadata: {
+          source: "daily_game_offline",
+        },
+      });
       return;
     }
 
@@ -390,7 +480,8 @@ function PlayPageContent() {
       };
 
       setGame(nextState);
-      confettiFiredRef.current = false;
+      setActiveGame(nextState.gameId);
+      resetGameEffects();
       setActiveTab("game");
       syncLocalStorage(nextState);
       if (nextState.userId) {
@@ -418,11 +509,18 @@ function PlayPageContent() {
         description: COPY.game.dailyError.description(message),
         variant: "destructive",
       });
+      logEvent({
+        event: "error",
+        metadata: {
+          source: "daily_game",
+          message,
+        },
+      });
     } finally {
       setIsStarting(false);
       setPendingDomain(null);
     }
-  }, [isStarting, setAnalyticsUserId, syncLocalStorage, toast]);
+  }, [isStarting, offline, resetGameEffects, setActiveGame, syncLocalStorage, toast]);
 
   useEffect(() => {
     if (autoDailyTriggerRef.current) {
@@ -462,6 +560,7 @@ function PlayPageContent() {
 
       setGame(nextState);
       setSelectedDomain(nextState.domain);
+      setActiveGame(nextState.gameId);
       syncLocalStorage(nextState);
       if (nextState.userId) {
         setAnalyticsUserId(nextState.userId);
@@ -470,13 +569,30 @@ function PlayPageContent() {
         handleGameFinished(nextState);
       }
     },
-    [game, handleGameFinished, syncLocalStorage],
+    [game, handleGameFinished, setActiveGame, syncLocalStorage],
   );
 
   const handleGuess = useCallback(
     async (letter: string) => {
       const normalized = letter.toLowerCase();
       if (!game || game.status !== "active" || isGuessing) {
+        return;
+      }
+
+      if (offline) {
+        toast({
+          title: COPY.game.offline.title,
+          description: COPY.game.offline.description,
+          variant: "destructive",
+        });
+        logEvent({
+          event: "error",
+          userId: game.userId,
+          metadata: {
+            source: "guess_offline",
+            game_id: game.gameId,
+          },
+        });
         return;
       }
 
@@ -490,6 +606,15 @@ function PlayPageContent() {
       }
 
       try {
+        logEvent({
+          event: "guess_click",
+          userId: game.userId,
+          metadata: {
+            letter: normalized,
+            game_id: game.gameId,
+            domain: game.domain,
+          },
+        });
         setIsGuessing(true);
         const response = await fetch("/api/guess", {
           method: "POST",
@@ -551,15 +676,43 @@ function PlayPageContent() {
           description: COPY.game.guessError.description(message),
           variant: "destructive",
         });
+        logEvent({
+          event: "error",
+          userId: game.userId,
+          metadata: {
+            source: "guess",
+            game_id: game.gameId,
+            message,
+          },
+        });
       } finally {
         setIsGuessing(false);
       }
     },
-    [applyGuessResult, game, guessedLetterSet, isGuessing, playCorrect, playWrong, toast],
+    [applyGuessResult, game, guessedLetterSet, isGuessing, offline, playCorrect, playWrong, toast],
   );
 
   const handleGiveUp = useCallback(async () => {
     if (!game || game.status !== "active") {
+      return;
+    }
+
+    if (offline) {
+      toast({
+        title: COPY.game.offline.title,
+        description: COPY.game.offline.description,
+        variant: "destructive",
+      });
+      if (game) {
+        logEvent({
+          event: "error",
+          userId: game.userId,
+          metadata: {
+            source: "give_up_offline",
+            game_id: game.gameId,
+          },
+        });
+      }
       return;
     }
 
@@ -591,8 +744,19 @@ function PlayPageContent() {
         description: COPY.game.giveUpError.description(message),
         variant: "destructive",
       });
+      if (game) {
+        logEvent({
+          event: "error",
+          userId: game.userId,
+          metadata: {
+            source: "give_up",
+            game_id: game.gameId,
+            message,
+          },
+        });
+      }
     }
-  }, [applyGuessResult, game, toast]);
+  }, [applyGuessResult, game, offline, toast]);
 
   const resumeGame = useCallback(async () => {
     const snapshot = window.localStorage.getItem(STORAGE_KEY);
@@ -601,11 +765,19 @@ function PlayPageContent() {
       return;
     }
 
+    if (offline) {
+      setHydrationError(COPY.game.offline.description);
+      setIsHydrating(false);
+      return;
+    }
+
+    let savedGameId: string | null = null;
     try {
       const data = JSON.parse(snapshot) as { gameId?: string };
       if (!data.gameId) {
         throw new Error("Invalid saved game");
       }
+      savedGameId = data.gameId;
 
       const response = await fetch(`/api/game/${data.gameId}`, {
         cache: "no-store",
@@ -622,7 +794,12 @@ function PlayPageContent() {
       };
 
       setGame(nextState);
-      confettiFiredRef.current = nextState.status === "won";
+      setActiveGame(nextState.gameId);
+      if (nextState.status === "won" && nextState.gameId) {
+        markConfettiPlayed(nextState.gameId);
+      } else {
+        resetGameEffects();
+      }
       setSelectedDomain(nextState.domain);
       setActiveTab("game");
       syncLocalStorage(nextState);
@@ -638,14 +815,29 @@ function PlayPageContent() {
         error instanceof Error ? error.message : "Unable to resume game";
       setHydrationError(message);
       window.localStorage.removeItem(STORAGE_KEY);
+      logEvent({
+        event: "error",
+        metadata: {
+          source: "resume_game",
+          game_id: savedGameId,
+          message,
+        },
+      });
     } finally {
       setIsHydrating(false);
     }
-  }, [handleGameFinished, syncLocalStorage]);
+  }, [handleGameFinished, markConfettiPlayed, offline, resetGameEffects, setActiveGame, syncLocalStorage]);
 
   useEffect(() => {
     resumeGame();
   }, [resumeGame]);
+
+  useEffect(() => {
+    if (!offline) {
+      setStartError(null);
+      setHydrationError(null);
+    }
+  }, [offline]);
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
@@ -808,8 +1000,10 @@ function PlayPageContent() {
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={beginDailyGame}
-                  disabled={isStarting}
+                  onClick={() => {
+                    void beginDailyGame();
+                  }}
+                  disabled={isStarting || offline}
                   onMouseEnter={() => setSelectedDomain("daily")}
                   onFocus={() => setSelectedDomain("daily")}
                   className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red disabled:opacity-70 ${
@@ -821,35 +1015,61 @@ function PlayPageContent() {
                   <span>{COPY.game.dailyLabel}</span>
                   {isDailyPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 </button>
-                {domainEntries.map(([domainKey]) => {
-                  const isSelected =
-                    game?.domain === domainKey || selectedDomain === domainKey;
-                  const isPending = pendingDomain === domainKey && isStarting;
-                  return (
-                    <button
-                      key={domainKey}
-                      type="button"
-                      onClick={() => beginNewGame(domainKey)}
-                      disabled={isStarting}
-                      onMouseEnter={() => setSelectedDomain(domainKey)}
-                      onFocus={() => setSelectedDomain(domainKey)}
-                      className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red disabled:opacity-70 ${
-                        isSelected
-                          ? "border-red bg-red text-beige"
-                          : "border-red/40 bg-white text-red hover:border-red"
-                      }`}
-                    >
-                      <span>{domainKey}</span>
-                      {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    </button>
-                  );
-                })}
+                {domainsLoading
+                  ? Array.from({ length: 4 }).map((_, index) => (
+                      <Skeleton key={index} className="h-10 w-32 rounded-full bg-white/70" />
+                    ))
+                  : domainEntries.map(([domainKey]) => {
+                      const isSelected =
+                        game?.domain === domainKey || selectedDomain === domainKey;
+                      const isPending = pendingDomain === domainKey && isStarting;
+                      return (
+                        <button
+                          key={domainKey}
+                          type="button"
+                          onClick={() => {
+                            void beginNewGame(domainKey);
+                          }}
+                          disabled={isStarting || domainsLoading || offline}
+                          onMouseEnter={() => setSelectedDomain(domainKey)}
+                          onFocus={() => setSelectedDomain(domainKey)}
+                          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red disabled:opacity-70 ${
+                            isSelected
+                              ? "border-red bg-red text-beige"
+                              : "border-red/40 bg-white text-red hover:border-red"
+                          }`}
+                        >
+                          <span>{domainKey}</span>
+                          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        </button>
+                      );
+                    })}
               </div>
+              {domainsError ? (
+                <p className="rounded-xl border border-red/30 bg-red/10 px-3 py-2 text-sm font-semibold text-red">
+                  {COPY.game.domainCard.loadError}
+                </p>
+              ) : null}
+              {startError && (!selectedDomain || startError.domain === selectedDomain) ? (
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red/30 bg-red/5 px-3 py-2 text-sm text-red">
+                  <span className="font-semibold">{startError.message}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-red/40 text-red hover:bg-red/10"
+                    onClick={() => {
+                      void beginNewGame(startError.domain);
+                    }}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : null}
               <p className="text-sm text-foreground/60">
                 {selectedDomain === "daily"
                   ? COPY.game.dailyHint
                   : selectedDomain
-                    ? domainEntries.find(([key]) => key === selectedDomain)?.[1].hint ?? ""
+                    ? selectedDomainHint ?? COPY.game.domainCard.emptyHint
                     : COPY.game.domainCard.emptyHint}
               </p>
             </CardContent>
@@ -887,7 +1107,13 @@ function PlayPageContent() {
                     <Skeleton className="h-40 w-full rounded-lg" />
                     <Skeleton className="h-16 w-full rounded-lg" />
                   </div>
-                  <Skeleton className="h-64 w-full rounded-lg" />
+                  <div className="flex flex-col items-center justify-center gap-4">
+                    <Skeleton className="h-64 w-full rounded-lg" />
+                    <div className="flex items-center gap-2 text-sm text-foreground/60">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Majnu&rsquo;s thinking…</span>
+                    </div>
+                  </div>
                 </div>
               ) : !game ? (
                 <div className="rounded-lg border border-dashed border-red/30 bg-beige/90 p-6 text-center text-foreground">
@@ -1003,8 +1229,12 @@ function PlayPageContent() {
                     </Button>
                     <Button
                       variant="secondary"
-                      onClick={() => beginNewGame(selectedDomain ?? "")}
-                      disabled={!selectedDomain || isStarting}
+                      onClick={() => {
+                        if (selectedDomain) {
+                          void beginNewGame(selectedDomain);
+                        }
+                      }}
+                      disabled={!selectedDomain || isStarting || domainsLoading || offline}
                       className="w-full"
                     >
                       Replay domain

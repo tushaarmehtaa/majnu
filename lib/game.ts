@@ -1,6 +1,10 @@
-import domains from "@/data/domains.json";
+import domainData from "@/data/domains.json";
+import { primeDomains, type DomainsMap } from "@/lib/static-data";
 
 export type GameStatus = "active" | "won" | "lost";
+
+const domains = domainData as DomainsMap;
+primeDomains(domains);
 
 export type DomainKey = keyof typeof domains;
 

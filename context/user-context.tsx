@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
 
 import { HandleModal } from "@/components/handle-modal";
 import { useToast } from "@/hooks/use-toast";
@@ -52,38 +53,35 @@ async function fetchUser(): Promise<UserState> {
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
-  const [state, setState] = useState<{ loading: boolean; user: UserState | null }>({
-    loading: true,
-    user: null,
-  });
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setState((prev) => ({ ...prev, loading: true }));
-    try {
-      const user = await fetchUser();
-      setState({ loading: false, user });
-      if (!user.handle) {
-        setModalOpen(true);
-      }
-    } catch (err) {
-      console.error(err);
-      setState({ loading: false, user: null });
-      toast({ title: "Unable to load profile", description: "Try refreshing." });
-    }
-  }, [toast]);
+  const { data, error: fetchError, isLoading, mutate } = useSWR<UserState>("/api/me", fetchUser, {
+    revalidateOnFocus: false,
+  });
+
+  const refresh = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (data && !data.handle) {
+      setModalOpen(true);
+    }
+  }, [data]);
+
+  useEffect(() => {
+    if (fetchError) {
+      toast({ title: "Unable to load profile", description: "Try refreshing." });
+    }
+  }, [fetchError, toast]);
 
   const avatar = useMemo(() => {
-    if (!state.user) return null;
-    const seed = state.user.handle ?? state.user.userId;
+    if (!data) return null;
+    const seed = data.handle ?? data.userId;
     return buildAvatar(seed);
-  }, [state.user]);
+  }, [data]);
 
   const saveHandle = useCallback(
     async (value: string) => {
@@ -102,16 +100,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         const payload = await response.json();
-        setState((prev) =>
-          prev.user
+        await mutate((prev) =>
+          prev
             ? {
-                loading: false,
-                user: {
-                  ...prev.user,
-                  handle: payload.handle ?? value.replace(/^@/, ""),
-                },
+                ...prev,
+                handle: payload.handle ?? value.replace(/^@/, ""),
               }
             : prev,
+          false,
         );
         toast({
           title: "Handle saved",
@@ -122,18 +118,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setSaving(false);
       }
     },
-    [toast],
+    [mutate, toast],
   );
 
   const contextValue = useMemo<UserContextValue>(
     () => ({
-      loading: state.loading,
-      user: state.user,
+      loading: isLoading,
+      user: data ?? null,
       avatar,
-      refresh: load,
+      refresh,
       promptHandle: () => setModalOpen(true),
     }),
-    [avatar, load, state.loading, state.user],
+    [avatar, data, isLoading, refresh],
   );
 
   return (
@@ -142,7 +138,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       <HandleModal
         open={modalOpen}
         onOpenChange={(open) => {
-          if (!open && !state.user?.handle) {
+          if (!open && !data?.handle) {
             // allow closing but remind later
             setModalOpen(false);
           } else {

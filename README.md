@@ -1,6 +1,21 @@
-# Save Majnu Bhai 
+# Save Majnu Bhai
 
 A dark-comedy execution-themed word guessing game built with Next.js and TypeScript. Help Majnu Bhai escape his fate by guessing words correctly before it's too late!
+
+## v1.1 — Visual and Motion Stability
+
+- Leaderboard data hydrates from local cache + server prefetch for zero flicker and instant tab swaps.
+- Responsive rank table/cards with unified motion easing keep the hierarchy readable on desktop and mobile.
+- Brand copy, reset timers, and ambient animations make Majnu’s world feel alive.
+- Unified loading overlay + skeleton components ensure shimmer appears only on first load.
+
+## Sprint 9 — Performance & Stability
+
+- WebP artwork, lazy domain loading, and cached JSON keep loads under 2.5s on 4G.
+- Global Zustand store resets audio/confetti reliably and tracks mute state across sessions.
+- Offline banner, retry CTA, and funny error boundary keep Majnu from disappearing on network hiccups.
+- Leaderboard and hint caches persist locally (w/ console-table analytics) so recent data survives dropouts.
+- Fresh skeleton shimmers, 300ms route fades, and new emoji medals make the UI feel finished.
 
 ## Features
 
@@ -20,7 +35,7 @@ A dark-comedy execution-themed word guessing game built with Next.js and TypeScr
 - Result screen share button with pre-filled copy and OG previews for wins and losses
 - Confetti bursts on victory, red-fade dramatics on defeat
 - Sound design with per-event SFX (correct, wrong, win, loss) and a global mute toggle
-- Lightweight analytics logging (`game_start`, `game_win`, `game_loss`, `share_click`, `sound_toggle`) output to the console for easy wiring later
+- Lightweight analytics logging (`game_start`, `guess_click`, `win`, `loss`, `share_click`, `leaderboard_open`, `error`, `sound_toggle`) output to the console for easy wiring later
 
 ### Hints, Share, Leaderboards
 - Deterministic hint generation with caching and domain-based fallbacks so every round surfaces a clue
@@ -39,7 +54,7 @@ A dark-comedy execution-themed word guessing game built with Next.js and TypeScr
 - **Language**: TypeScript (strict mode)
 - **Styling**: Tailwind CSS + shadcn/ui + custom motion design
 - **Animation**: Framer Motion
-- **Audio tooling**: Hand-rolled mp3 generation (Pillow + lameenc) stored in `public/sfx`
+- **Audio tooling**: Hand-rolled mp3 generation (Pillow + lameenc) stored in `public/audio`
 - **Database**: 
   - Development: In-memory mock
   - Production: [InstantDB](https://instantdb.com/) (optional)

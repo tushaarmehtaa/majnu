@@ -29,12 +29,20 @@ export async function generateMetadata({
   const rank = asString(params.rank) ?? "";
   const word = asString(params.word) ?? "";
   const domain = asString(params.domain) ?? "";
+  const handle = asString(params.handle) ?? "";
+  const wins = asString(params.wins) ?? "";
+  const losses = asString(params.losses) ?? "";
+  const streak = asString(params.streak) ?? "";
 
   ogParams.set("score_delta", scoreDelta);
   ogParams.set("score_total", scoreTotal);
   if (rank) ogParams.set("rank", rank);
   if (word) ogParams.set("word", word);
   if (domain) ogParams.set("domain", domain);
+  if (handle) ogParams.set("handle", handle.startsWith("@") ? handle : `@${handle}`);
+  if (wins) ogParams.set("wins", wins);
+  if (losses) ogParams.set("losses", losses);
+  if (streak) ogParams.set("streak", streak);
 
   const image = `${SITE_URL}/api/og/result?${ogParams.toString()}`;
   const canonical = new URL("/result", SITE_URL);
@@ -45,6 +53,10 @@ export async function generateMetadata({
   if (scoreTotal) canonical.searchParams.set("scoreTotal", scoreTotal);
   if (rank) canonical.searchParams.set("rank", rank);
   if (word) canonical.searchParams.set("word", word);
+  if (handle) canonical.searchParams.set("handle", handle.startsWith("@") ? handle : `@${handle}`);
+  if (wins) canonical.searchParams.set("wins", wins);
+  if (losses) canonical.searchParams.set("losses", losses);
+  if (streak) canonical.searchParams.set("streak", streak);
 
   return {
     title,
@@ -58,7 +70,9 @@ export async function generateMetadata({
           url: image,
           width: 1200,
           height: 630,
-          alt: isWin ? "Majnu smiling on a green backdrop." : "Majnu hanged on a red backdrop.",
+          alt: isWin
+            ? `Majnu Bhai saved by ${handle || "an anonymous savior"}.`
+            : `Majnu Bhai lost today. ${handle || "Someone"} hesitated.`,
         },
       ],
     },

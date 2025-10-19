@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { logEvent } from "@/lib/analytics";
 import { COPY } from "@/lib/copy";
 import { buildShareCopy } from "@/lib/share";
+import { useOffline } from "@/hooks/use-offline";
 
 type ShareButtonProps = {
   outcome: "win" | "loss";
@@ -15,6 +16,10 @@ type ShareButtonProps = {
   rank?: number | null;
   shareUrl: string;
   userId?: string;
+  handle?: string | null;
+  wins?: number | null;
+  losses?: number | null;
+  streak?: number | null;
   className?: string;
 };
 
@@ -25,17 +30,39 @@ export function ShareButton({
   rank,
   shareUrl,
   userId,
+  handle,
+  wins,
+  losses,
+  streak,
   className,
 }: ShareButtonProps) {
   const { toast } = useToast();
   const [isCreating, setIsCreating] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
   const shortLinkRef = useRef<string | null>(null);
+  const { offline } = useOffline();
   const handleShare = useCallback(async () => {
+    if (offline) {
+      setShareError(COPY.game.offline.description);
+      toast({
+        title: COPY.game.offline.title,
+        description: COPY.game.offline.description,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setShareError(null);
+
     const copy = buildShareCopy({
       outcome,
       scoreDelta: scoreDelta ?? null,
       scoreTotal: scoreTotal ?? null,
       rank: rank ?? null,
+      handle: handle ?? null,
+      wins: wins ?? null,
+      losses: losses ?? null,
+      streak: streak ?? null,
     });
     let targetUrl = shareUrl;
     if (!shortLinkRef.current && !isCreating) {
@@ -53,8 +80,22 @@ export function ShareButton({
             targetUrl = payload.url;
           }
         }
-      } catch {
-        // ignore failure, fall back to long URL
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to create share link";
+        setShareError(message);
+        toast({
+          title: "Share link failed",
+          description: message,
+          variant: "destructive",
+        });
+        logEvent({
+          event: "error",
+          userId,
+          metadata: {
+            source: "share_link",
+            message,
+          },
+        });
       } finally {
         setIsCreating(false);
       }
@@ -74,6 +115,7 @@ export function ShareButton({
         score_delta: scoreDelta ?? null,
         score_total: scoreTotal ?? null,
         rank: rank ?? null,
+        handle: handle ?? null,
       },
     });
 
@@ -92,7 +134,7 @@ export function ShareButton({
         });
       }
     }
-  }, [isCreating, outcome, rank, scoreDelta, scoreTotal, shareUrl, toast, userId]);
+  }, [handle, isCreating, losses, offline, outcome, rank, scoreDelta, scoreTotal, shareUrl, streak, toast, userId, wins]);
 
   return (
     <Button
@@ -100,8 +142,9 @@ export function ShareButton({
       variant="secondary"
       onClick={handleShare}
       className={className}
+      disabled={isCreating}
     >
-      {COPY.share.button}
+      {shareError ? "Retry Share" : COPY.share.button}
     </Button>
   );
 }

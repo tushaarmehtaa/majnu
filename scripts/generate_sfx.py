@@ -5,7 +5,7 @@ import lameenc
 import numpy as np
 
 SAMPLE_RATE = 44100
-OUTPUT_DIR = Path("public/sfx")
+OUTPUT_DIR = Path("public/audio")
 
 
 def encode(samples: np.ndarray) -> bytes:

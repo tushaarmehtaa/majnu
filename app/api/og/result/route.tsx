@@ -27,16 +27,21 @@ export async function GET(request: Request) {
   const scoreTotal = searchParams.get("score_total") ?? "0";
   const rank = formatRank(searchParams.get("rank"));
   const word = (searchParams.get("word") ?? "").toUpperCase();
-  const domain = searchParams.get("domain")
-    ? searchParams.get("domain")!.toUpperCase()
-    : "";
+  const domain = searchParams.get("domain") ? searchParams.get("domain")!.toUpperCase() : "";
+  const handle = searchParams.get("handle") ?? "@anon";
+  const wins = searchParams.get("wins") ?? "0";
+  const losses = searchParams.get("losses") ?? "0";
+  const streak = searchParams.get("streak") ?? "0";
 
-  const background = outcome === "win" ? "#34D399" : "#F87171";
-  const headline = outcome === "win" ? "Majnu Survived" : "Majnu is Dead";
-  const subline =
-    outcome === "win"
-      ? "Rope slipped. Score climbs."
-      : "The knot tightened. Score dropped.";
+  const heroTitle = outcome === "win" ? "Majnu Bhai was saved today" : "Majnu Bhai fell today";
+  const heroSub = outcome === "win" ? `by ${handle}` : `by ${handle} — the don waits.`;
+  const gradient = outcome === "win"
+    ? "linear-gradient(135deg, #FFE5E0 0%, #E03C31 55%, #A0181A 100%)"
+    : "linear-gradient(135deg, #2E0B0B 0%, #5C1B1B 55%, #120303 100%)";
+  const panelBg = outcome === "win" ? "rgba(255, 255, 255, 0.25)" : "rgba(255, 234, 232, 0.2)";
+  const textColor = outcome === "win" ? "#1C0B0A" : "#FFE5E0";
+  const accentColor = outcome === "win" ? "#FFE5E0" : "#E03C31";
+  const emoji = outcome === "win" ? "😎" : "💀";
 
   return new ImageResponse(
     (
@@ -47,39 +52,33 @@ export async function GET(request: Request) {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: "60px 80px",
-          background,
-          color: outcome === "win" ? "#0B1F17" : "#330000",
+          padding: "70px 80px",
+          backgroundImage: gradient,
+          color: textColor,
           fontFamily: "Inter, sans-serif",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div
-              style={{
-                fontSize: 36,
-                fontWeight: 800,
-                letterSpacing: 6,
-                textTransform: "uppercase",
-              }}
-            >
-              {headline}
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: 6, textTransform: "uppercase" }}>{heroTitle}</div>
+            <div style={{ fontSize: 28, letterSpacing: 3, textTransform: "uppercase", color: accentColor }}>{heroSub}</div>
+            <div style={{ fontSize: 20, letterSpacing: 4, textTransform: "uppercase" }}>
+              Wins +3 | Losses –1 | Streak bonus × each save
             </div>
-            <div style={{ fontSize: 22, marginTop: 12 }}>{subline}</div>
           </div>
           <div
             style={{
               width: 160,
               height: 160,
               borderRadius: "50%",
-              background: outcome === "win" ? "#F0FFF4" : "#200000",
+              background: panelBg,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontSize: 80,
             }}
           >
-            {outcome === "win" ? "😎" : "💀"}
+            {emoji}
           </div>
         </div>
 
@@ -87,9 +86,9 @@ export async function GET(request: Request) {
           <div
             style={{
               flex: 1,
-              background: "rgba(255,255,255,0.2)",
+              background: panelBg,
               borderRadius: 28,
-              padding: "32px 36px",
+              padding: "32px 40px",
               display: "flex",
               flexDirection: "column",
               gap: 16,
@@ -100,7 +99,7 @@ export async function GET(request: Request) {
                 fontSize: 18,
                 letterSpacing: 4,
                 textTransform: "uppercase",
-                color: outcome === "win" ? "#0B1F17" : "#330000",
+                color: accentColor,
               }}
             >
               Word Revealed
@@ -111,7 +110,7 @@ export async function GET(request: Request) {
           <div
             style={{
               width: 280,
-              background: "rgba(255,255,255,0.2)",
+              background: panelBg,
               borderRadius: 28,
               padding: "32px 36px",
               display: "flex",
@@ -131,6 +130,12 @@ export async function GET(request: Request) {
               <div style={{ fontSize: 16, textTransform: "uppercase", letterSpacing: 4 }}>Rank</div>
               <div style={{ fontSize: 36, fontWeight: 600 }}>{rank}</div>
             </div>
+            <div style={{ height: 1, background: "rgba(255,255,255,0.25)", margin: "12px 0" }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 18 }}>
+              <span>Wins {wins}</span>
+              <span>Losses {losses}</span>
+              <span>Streak {streak}</span>
+            </div>
           </div>
         </div>
 
@@ -140,10 +145,12 @@ export async function GET(request: Request) {
             justifyContent: "space-between",
             alignItems: "center",
             fontSize: 20,
+            letterSpacing: 4,
+            textTransform: "uppercase",
           }}
         >
-          <span style={{ textTransform: "uppercase", letterSpacing: 6 }}>saveMajnu.live</span>
-          <span style={{ fontSize: 18 }}>Hangman but the don is watching.</span>
+          <span>SaveMajnu.live</span>
+          <span style={{ fontSize: 18, letterSpacing: 2 }}>Hangman but the don is watching.</span>
         </div>
       </div>
     ),
@@ -153,4 +160,3 @@ export async function GET(request: Request) {
     },
   );
 }
-
