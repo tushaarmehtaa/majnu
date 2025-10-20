@@ -508,12 +508,33 @@ function getLeaderboardMap(scope: "daily" | "weekly") {
   return scope === "daily" ? store.leaderboardsDaily : store.leaderboardsWeekly;
 }
 
+function purgeLeaderboard(scope: "daily" | "weekly", referenceDate: Date = new Date()) {
+  const currentScopeKey = scope === "daily" ? dateKey(referenceDate) : weekKey(referenceDate);
+  const map = getLeaderboardMap(scope);
+  let removed = 0;
+  for (const [id, record] of map.entries()) {
+    if (record.scope_key !== currentScopeKey) {
+      map.delete(id);
+      store.leaderboardSnapshots.delete(snapshotKey(record.scope_key, record.user_id));
+      removed += 1;
+    }
+  }
+  if (removed > 0) {
+    logServerEvent("leaderboard_purged", {
+      scope,
+      currentScopeKey,
+      removed,
+    });
+  }
+}
+
 function upsertLeaderboard(
   scope: "daily" | "weekly",
   scopeKey: string,
   userId: string,
   updater: (record: LeaderboardRecord) => void,
 ) {
+  purgeLeaderboard(scope);
   const map = getLeaderboardMap(scope);
   const id = leaderboardKey(scopeKey, userId);
   let record = map.get(id);
@@ -1097,6 +1118,7 @@ export async function getLeaderboard(
   options: { cursor?: string; date?: Date } = {},
 ): Promise<LeaderboardPage> {
   const { cursor, date = new Date() } = options;
+  purgeLeaderboard(scope, date);
   const scopeKey = scope === "daily" ? dateKey(date) : weekKey(date);
   const map = getLeaderboardMap(scope);
   const relevant = Array.from(map.values()).filter((record) => record.scope_key === scopeKey);

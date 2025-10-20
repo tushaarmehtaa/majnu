@@ -41,6 +41,7 @@ import { useUser } from "@/context/user-context";
 import type { AchievementRecord } from "@/lib/instantdb";
 import { useUIStore } from "@/lib/stores/ui-store";
 import { findCachedHint, rememberHint } from "@/lib/client-hint-cache";
+import { fetchWithRetry, MajnuFetchError, resolveFetchErrorMessage } from "@/lib/http";
 
 type GameState = {
   gameId: string;
@@ -54,6 +55,8 @@ type GameState = {
   guessed_letters: string[];
   wrong_letters: string[];
   finished_at: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   score_delta?: number | null;
   score_total?: number | null;
   rank?: number | null;
@@ -90,6 +93,7 @@ const toTitleCase = (value: string) =>
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
 
+
 function PlayPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -112,6 +116,8 @@ function PlayPageContent() {
   const [hydrationError, setHydrationError] = useState<string | null>(null);
   const [flashingLetter, setFlashingLetter] = useState<string | null>(null);
   const autoDailyTriggerRef = useRef(false);
+  const roundStartRef = useRef<Record<string, number>>({});
+  const hintTrackedRef = useRef<Set<string>>(new Set());
   const { play: playCorrect } = useSound("/audio/correct-guess.mp3");
   const { play: playWrong } = useSound("/audio/wrong-guess.mp3");
   const { play: playWin } = useSound("/audio/win.mp3", { volume: 0.85 });
@@ -175,6 +181,25 @@ function PlayPageContent() {
     return () => window.clearTimeout(timer);
   }, [flashingLetter]);
 
+  useEffect(() => {
+    if (!game?.gameId || !game.hint) {
+      return;
+    }
+    if (hintTrackedRef.current.has(game.gameId)) {
+      return;
+    }
+    hintTrackedRef.current.add(game.gameId);
+    logEvent({
+      event: "hint_used",
+      userId: game.userId,
+      metadata: {
+        game_id: game.gameId,
+        domain: game.domain,
+        mode: game.mode,
+      },
+    });
+  }, [game]);
+
   const handleGameFinished = useCallback(
     (state: GameState) => {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -189,6 +214,13 @@ function PlayPageContent() {
           : COPY.result.lossDescription;
       const description = `${baseDescription}${scoreSnippet}`;
 
+      const startedAt = state.gameId ? roundStartRef.current[state.gameId] : undefined;
+      const durationMs = typeof startedAt === "number" ? Math.max(Date.now() - startedAt, 0) : null;
+      if (state.gameId) {
+        delete roundStartRef.current[state.gameId];
+        hintTrackedRef.current.delete(state.gameId);
+      }
+
       if (state.status === "won") {
         playWin();
         if (state.gameId && confettiPlayedFor !== state.gameId) {
@@ -198,8 +230,9 @@ function PlayPageContent() {
       } else if (state.status === "lost") {
         playLoss();
       }
+      const outcomeEvent = state.status === "won" ? "game_win" : "game_loss";
       logEvent({
-        event: state.status === "won" ? "win" : "loss",
+        event: outcomeEvent,
         userId: state.userId,
         metadata: {
           game_id: state.gameId,
@@ -209,6 +242,8 @@ function PlayPageContent() {
           score_total: state.score_total ?? undefined,
           rank: state.rank ?? undefined,
           throttled: state.throttled ?? false,
+          duration_ms: durationMs ?? undefined,
+          round_started_at: startedAt ?? undefined,
         },
       });
 
@@ -329,19 +364,18 @@ function PlayPageContent() {
         setSelectedDomain(domainKey);
         setStartError(null);
 
-        const response = await fetch("/api/new-game", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const response = await fetchWithRetry(
+          "/api/new-game",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              domain: domainKey,
+            }),
           },
-          body: JSON.stringify({
-            domain: domainKey,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Unable to start game");
-        }
+        );
 
         const payload = (await response.json()) as GameResponse;
         const domainLabel = toTitleCase(payload.domain ?? domainKey);
@@ -357,6 +391,8 @@ function PlayPageContent() {
           guessed_letters: payload.guessed_letters,
           wrong_letters: payload.wrong_letters,
           finished_at: payload.finished_at ?? null,
+          created_at: payload.created_at ?? null,
+          updated_at: payload.updated_at ?? null,
           score_delta: null,
           score_total: null,
           rank: null,
@@ -366,6 +402,8 @@ function PlayPageContent() {
         };
 
         setGame(nextState);
+        roundStartRef.current[nextState.gameId] = Date.now();
+        hintTrackedRef.current.delete(nextState.gameId);
         setActiveGame(nextState.gameId);
         resetGameEffects();
         setActiveTab("game");
@@ -381,6 +419,7 @@ function PlayPageContent() {
             domain: nextState.domain,
             game_id: nextState.gameId,
             mode: nextState.mode,
+            round_started_at: roundStartRef.current[nextState.gameId],
           },
         });
 
@@ -389,8 +428,7 @@ function PlayPageContent() {
           description: COPY.game.start.description(domainLabel),
         });
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unable to start game";
+        const message = await resolveFetchErrorMessage(error, "Unable to start game");
         setStartError({ domain: domainKey, message });
         toast({
           title: COPY.game.startError.title,
@@ -438,24 +476,36 @@ function PlayPageContent() {
       setPendingDomain("daily");
       setSelectedDomain("daily");
 
-      const response = await fetch("/api/daily-game", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (response.status === 409) {
-        toast({
-          title: COPY.game.dailyLocked.title,
-          description: COPY.game.dailyLocked.description,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error("Unable to start daily challenge");
+      let response: Response;
+      try {
+        response = await fetchWithRetry(
+          "/api/daily-game",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+          {
+            retryOnStatus: (status) => status !== 409 && status !== 412,
+          },
+        );
+      } catch (error) {
+        if (error instanceof MajnuFetchError && error.response?.status === 409) {
+          toast({
+            title: COPY.game.dailyLocked.title,
+            description: COPY.game.dailyLocked.description,
+            variant: "destructive",
+          });
+          logEvent({
+            event: "error",
+            metadata: {
+              source: "daily_game_locked",
+            },
+          });
+          return;
+        }
+        throw error;
       }
 
       const payload = (await response.json()) as GameResponse;
@@ -471,6 +521,8 @@ function PlayPageContent() {
         guessed_letters: payload.guessed_letters,
         wrong_letters: payload.wrong_letters,
         finished_at: payload.finished_at ?? null,
+        created_at: payload.created_at ?? null,
+        updated_at: payload.updated_at ?? null,
         score_delta: null,
         score_total: null,
         rank: null,
@@ -480,6 +532,8 @@ function PlayPageContent() {
       };
 
       setGame(nextState);
+      roundStartRef.current[nextState.gameId] = Date.now();
+      hintTrackedRef.current.delete(nextState.gameId);
       setActiveGame(nextState.gameId);
       resetGameEffects();
       setActiveTab("game");
@@ -494,6 +548,7 @@ function PlayPageContent() {
           domain: nextState.domain,
           game_id: nextState.gameId,
           mode: nextState.mode,
+          round_started_at: roundStartRef.current[nextState.gameId],
         },
       });
 
@@ -502,8 +557,7 @@ function PlayPageContent() {
         description: COPY.game.dailyStart.description(toTitleCase(nextState.domain)),
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to start daily challenge";
+      const message = await resolveFetchErrorMessage(error, "Unable to start daily challenge");
       toast({
         title: COPY.game.dailyError.title,
         description: COPY.game.dailyError.description(message),
@@ -549,6 +603,8 @@ function PlayPageContent() {
         guessed_letters: payload.guessed_letters,
         wrong_letters: payload.wrong_letters,
         finished_at: payload.finished_at ?? null,
+        created_at: payload.created_at ?? game?.created_at ?? null,
+        updated_at: payload.updated_at ?? new Date().toISOString(),
         score_delta: payload.score_delta ?? null,
         score_total: payload.score_total ?? game?.score_total ?? null,
         rank: payload.rank ?? game?.rank ?? null,
@@ -616,18 +672,16 @@ function PlayPageContent() {
           },
         });
         setIsGuessing(true);
-        const response = await fetch("/api/guess", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const response = await fetchWithRetry(
+          "/api/guess",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ gameId: game.gameId, letter: normalized }),
           },
-          body: JSON.stringify({ gameId: game.gameId, letter: normalized }),
-        });
-
-        if (!response.ok) {
-          const errorPayload = await response.json();
-          throw new Error(errorPayload.error ?? "Guess failed");
-        }
+        );
 
         const payload = (await response.json()) as GameResponse;
 
@@ -669,8 +723,7 @@ function PlayPageContent() {
 
         applyGuessResult(payload);
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Guess failed";
+        const message = await resolveFetchErrorMessage(error, "Guess failed");
         toast({
           title: COPY.game.guessError.title,
           description: COPY.game.guessError.description(message),
@@ -717,17 +770,16 @@ function PlayPageContent() {
     }
 
     try {
-      const response = await fetch("/api/give-up", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetchWithRetry(
+        "/api/give-up",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ gameId: game.gameId }),
         },
-        body: JSON.stringify({ gameId: game.gameId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Unable to give up right now");
-      }
+      );
 
       const payload = (await response.json()) as GameResponse;
       toast({
@@ -737,8 +789,7 @@ function PlayPageContent() {
       });
       applyGuessResult(payload);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to give up";
+      const message = await resolveFetchErrorMessage(error, "Unable to give up right now");
       toast({
         title: COPY.game.giveUpError.title,
         description: COPY.game.giveUpError.description(message),
@@ -779,13 +830,12 @@ function PlayPageContent() {
       }
       savedGameId = data.gameId;
 
-      const response = await fetch(`/api/game/${data.gameId}`, {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error("Saved game missing");
-      }
+      const response = await fetchWithRetry(
+        `/api/game/${data.gameId}`,
+        {
+          cache: "no-store",
+        },
+      );
 
       const payload = (await response.json()) as GameState;
       const nextState: GameState = {
@@ -794,6 +844,10 @@ function PlayPageContent() {
       };
 
       setGame(nextState);
+      if (nextState.gameId) {
+        roundStartRef.current[nextState.gameId] = Date.now();
+        hintTrackedRef.current.delete(nextState.gameId);
+      }
       setActiveGame(nextState.gameId);
       if (nextState.status === "won" && nextState.gameId) {
         markConfettiPlayed(nextState.gameId);
@@ -811,8 +865,7 @@ function PlayPageContent() {
         handleGameFinished(nextState);
       }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to resume game";
+      const message = await resolveFetchErrorMessage(error, "Unable to resume game");
       setHydrationError(message);
       window.localStorage.removeItem(STORAGE_KEY);
       logEvent({

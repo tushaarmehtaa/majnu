@@ -42,8 +42,41 @@ const description =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title,
+  title: {
+    default: title,
+    template: "%s | Save Majnu Bhai",
+  },
   description,
+  applicationName: "Save Majnu Bhai",
+  manifest: "/manifest.webmanifest",
+  keywords: [
+    "hangman",
+    "bollywood game",
+    "word puzzle",
+    "majnu bhai",
+    "dark humor",
+    "execution game",
+  ],
+  category: "Games",
+  authors: [{ name: "Majnu Launch Crew" }],
+  alternates: {
+    canonical: "/",
+    languages: {
+      "en-US": "/",
+    },
+  },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/icon-192.png", sizes: "192x192" }],
+    shortcut: ["/favicon.ico"],
+  },
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#C0392B" },
+    { media: "(prefers-color-scheme: dark)", color: "#C0392B" },
+  ],
   openGraph: {
     title,
     description,
@@ -51,7 +84,7 @@ export const metadata: Metadata = {
     siteName: title,
     images: [
       {
-        url: "/og/win.webp",
+        url: `${siteUrl}/og/win.webp`,
         width: 1200,
         height: 630,
         alt: "Majnu Bhai survives the rope.",
@@ -64,7 +97,16 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title,
     description,
-    images: ["/og/win.webp"],
+    images: [`${siteUrl}/og/win.webp`],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title,
   },
 };
 

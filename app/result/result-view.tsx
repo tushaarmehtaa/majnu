@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -11,6 +12,9 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { ResultEffects } from "@/app/result/result-effects";
 import { ShareButton } from "@/app/result/share-button";
 import { COPY } from "@/lib/copy";
+import { logEvent } from "@/lib/analytics";
+
+const FOLLOW_URL = "https://x.com/intent/follow?screen_name=savemajnu";
 
 type ResultViewProps = {
   statusLabel: string;
@@ -62,6 +66,22 @@ export function ResultView({
   const title = outcome === "win" ? COPY.result.title.win : COPY.result.title.loss;
   const description = outcome === "win" ? COPY.result.winDescription : COPY.result.lossDescription;
   const subtitle = outcome === "win" ? COPY.result.subtitle.win : COPY.result.subtitle.loss;
+  const handleFollowClick = useCallback(() => {
+    logEvent({
+      event: "follow_clicked",
+      userId: share.userId,
+      metadata: {
+        source: "result",
+        outcome,
+      },
+    });
+    if (typeof window !== "undefined") {
+      const opened = window.open(FOLLOW_URL, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        window.location.href = FOLLOW_URL;
+      }
+    }
+  }, [outcome, share.userId]);
 
   return (
     <div className="relative">
@@ -170,6 +190,20 @@ export function ResultView({
                   {share.rank ?? "Unranked"}
                 </p>
               </div>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-red/20 bg-white/75 p-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-red">Keep Majnu in the headlines</p>
+              <p className="text-sm text-foreground/70">
+                Follow rope alerts and post-mortem threads so you know the moment Majnu stumbles.
+              </p>
+              <Button
+                variant="secondary"
+                className="bg-red/10 text-red hover:bg-red/20"
+                onClick={handleFollowClick}
+              >
+                Follow @savemajnu
+              </Button>
             </div>
           </CardContent>
           <CardFooter className="flex flex-wrap items-center justify-center gap-3 bg-white/70 p-6">

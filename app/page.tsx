@@ -12,6 +12,7 @@ import { COPY } from "@/lib/copy";
 import { preloadDomains } from "@/hooks/use-domains";
 import { useOffline } from "@/hooks/use-offline";
 import { logEvent } from "@/lib/analytics";
+import { fetchWithRetry, resolveFetchErrorMessage } from "@/lib/http";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -45,12 +46,9 @@ export default function LandingPage() {
     setTopError(null);
 
     try {
-      const response = await fetch("/api/leaderboard?scope=daily&limit=3", {
+      const response = await fetchWithRetry("/api/leaderboard?scope=daily&limit=3", {
         cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(`Failed to load leaderboard (${response.status})`);
-      }
       const payload = await response.json();
       setTopPlayers(payload.items ?? []);
       if (typeof window !== "undefined") {
@@ -61,7 +59,7 @@ export default function LandingPage() {
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to load leaderboard";
+      const message = await resolveFetchErrorMessage(error, "Unable to load leaderboard");
       setTopError(message);
       logEvent({
         event: "error",

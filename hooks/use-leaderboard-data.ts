@@ -5,17 +5,22 @@ import useSWR from "swr";
 
 import type { LeaderboardPayload, LeaderboardRow, LeaderboardScope } from "@/lib/leaderboard-types";
 import { getCachedLeaderboard, persistLeaderboard } from "@/lib/leaderboard-cache";
+import { fetchWithRetry, MajnuFetchError } from "@/lib/http";
 
 const fetchPage = async (scope: LeaderboardScope, cursor?: string): Promise<LeaderboardPayload> => {
   const params = new URLSearchParams({ scope });
   if (cursor) params.set("cursor", cursor);
-  const response = await fetch(`/api/leaderboard?${params.toString()}`, {
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load leaderboard (${response.status})`);
+  try {
+    const response = await fetchWithRetry(`/api/leaderboard?${params.toString()}`, {
+      cache: "no-store",
+    });
+    return (await response.json()) as LeaderboardPayload;
+  } catch (error) {
+    if (error instanceof MajnuFetchError && error.response) {
+      throw new Error(`Failed to load leaderboard (${error.response.status})`);
+    }
+    throw error instanceof Error ? error : new Error("Failed to load leaderboard");
   }
-  return (await response.json()) as LeaderboardPayload;
 };
 
 export function useLeaderboardData(scope: LeaderboardScope, initial?: LeaderboardPayload) {

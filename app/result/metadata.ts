@@ -59,12 +59,17 @@ export async function generateMetadata({
   if (streak) canonical.searchParams.set("streak", streak);
 
   return {
+    metadataBase: new URL(SITE_URL),
     title,
     description,
+    alternates: {
+      canonical: canonical.toString(),
+    },
     openGraph: {
       title,
       description,
       url: canonical.toString(),
+      siteName: "Save Majnu Bhai",
       images: [
         {
           url: image,

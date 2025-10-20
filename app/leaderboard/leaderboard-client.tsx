@@ -17,6 +17,7 @@ import { motionFade, motionListItem } from "@/lib/motion";
 import { useOffline } from "@/hooks/use-offline";
 import { useLeaderboardData } from "@/hooks/use-leaderboard-data";
 import type { LeaderboardPayload, LeaderboardRow, LeaderboardScope } from "@/lib/leaderboard-types";
+import { logEvent } from "@/lib/analytics";
 
 const SCOPES: LeaderboardScope[] = ["daily", "weekly"];
 
@@ -208,6 +209,18 @@ export function LeaderboardClient({ userId, initialData }: LeaderboardClientProp
       },
     [payload?.my, userId],
   );
+
+  useEffect(() => {
+    logEvent({
+      event: "leaderboard_viewed",
+      userId,
+      metadata: {
+        scope,
+        offline,
+        source: "leaderboard_page",
+      },
+    });
+  }, [offline, scope, userId]);
 
   useEffect(() => {
     if (countdown === "00:00" && !loading && !offline) {

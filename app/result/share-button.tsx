@@ -8,6 +8,7 @@ import { logEvent } from "@/lib/analytics";
 import { COPY } from "@/lib/copy";
 import { buildShareCopy } from "@/lib/share";
 import { useOffline } from "@/hooks/use-offline";
+import { fetchWithRetry, resolveFetchErrorMessage } from "@/lib/http";
 
 type ShareButtonProps = {
   outcome: "win" | "loss";
@@ -68,20 +69,21 @@ export function ShareButton({
     if (!shortLinkRef.current && !isCreating) {
       try {
         setIsCreating(true);
-        const response = await fetch("/api/share-link", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target: shareUrl }),
-        });
-        if (response.ok) {
-          const payload = (await response.json()) as { url?: string };
-          if (payload.url) {
-            shortLinkRef.current = payload.url;
-            targetUrl = payload.url;
-          }
+        const response = await fetchWithRetry(
+          "/api/share-link",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ target: shareUrl }),
+          },
+        );
+        const payload = (await response.json()) as { url?: string };
+        if (payload.url) {
+          shortLinkRef.current = payload.url;
+          targetUrl = payload.url;
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unable to create share link";
+        const message = await resolveFetchErrorMessage(error, "Unable to create share link");
         setShareError(message);
         toast({
           title: "Share link failed",
@@ -108,7 +110,7 @@ export function ShareButton({
     )}&url=${encodeURIComponent(targetUrl)}`;
 
     logEvent({
-      event: "share_click",
+      event: "share_clicked",
       userId,
       metadata: {
         outcome,
