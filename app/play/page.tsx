@@ -9,31 +9,15 @@ import { motion } from "framer-motion";
 
 import { MAX_WRONG_GUESSES, type GameStatus } from "@/lib/game";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { COPY } from "@/lib/copy";
 import { useSound } from "@/hooks/use-sound";
+import { SOUNDS, SOUND_VOLUMES } from "@/lib/sounds";
 import { useOffline } from "@/hooks/use-offline";
 import { useDomains } from "@/hooks/use-domains";
 import { logEvent, setAnalyticsUserId } from "@/lib/analytics";
@@ -99,29 +83,27 @@ function PlayPageContent() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { promptHandle, refresh } = useUser();
-  const { domains, loading: domainsLoading, error: domainsError } = useDomains();
+  const { domains } = useDomains();
   const { offline } = useOffline();
-  const [startError, setStartError] = useState<{ domain: string; message: string } | null>(null);
   const setActiveGame = useUIStore((state) => state.setActiveGame);
   const resetGameEffects = useUIStore((state) => state.resetGameEffects);
   const markConfettiPlayed = useUIStore((state) => state.markConfettiPlayed);
   const confettiPlayedFor = useUIStore((state) => state.confettiPlayedFor);
-  const [activeTab, setActiveTab] = useState<"domain" | "game">("domain");
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [game, setGame] = useState<GameState | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [pendingDomain, setPendingDomain] = useState<string | null>(null);
   const [isGuessing, setIsGuessing] = useState(false);
   const [isHydrating, setIsHydrating] = useState(true);
-  const [hydrationError, setHydrationError] = useState<string | null>(null);
   const [flashingLetter, setFlashingLetter] = useState<string | null>(null);
   const autoDailyTriggerRef = useRef(false);
   const roundStartRef = useRef<Record<string, number>>({});
   const hintTrackedRef = useRef<Set<string>>(new Set());
-  const { play: playCorrect } = useSound("/audio/correct-guess.mp3");
-  const { play: playWrong } = useSound("/audio/wrong-guess.mp3");
-  const { play: playWin } = useSound("/audio/win.mp3", { volume: 0.85 });
-  const { play: playLoss } = useSound("/audio/loss.mp3", { volume: 0.9 });
+  const { play: playCorrect } = useSound(SOUNDS.correctGuess, { volume: SOUND_VOLUMES.feedback });
+  const { play: playWrong } = useSound(SOUNDS.wrongGuess, { volume: SOUND_VOLUMES.feedback });
+  const { play: playWin } = useSound(SOUNDS.win, { volume: SOUND_VOLUMES.outcome });
+  const { play: playLoss } = useSound(SOUNDS.loss, { volume: SOUND_VOLUMES.outcome });
+  const { play: playTypewriter } = useSound(SOUNDS.typewriterKey, { volume: SOUND_VOLUMES.ui });
   const triggerConfetti = useCallback(async () => {
     const { default: confetti } = await import("canvas-confetti");
     confetti({
@@ -135,17 +117,9 @@ function PlayPageContent() {
   }, []);
 
   const domainEntries = useMemo(
-    () => (domains ? (Object.entries(domains) as [string, { hint: string; words: string[] } ][]) : []),
+    () => (domains ? (Object.entries(domains) as [string, { hint: string; words: string[] }][]) : []),
     [domains],
   );
-
-  const selectedDomainHint = useMemo(() => {
-    if (!selectedDomain || domainEntries.length === 0) {
-      return null;
-    }
-    const entry = domainEntries.find(([key]) => key === selectedDomain);
-    return entry?.[1].hint ?? null;
-  }, [domainEntries, selectedDomain]);
 
   const formattedDomain = useMemo(() => {
     if (game?.mode === "daily" || selectedDomain === "daily") {
@@ -169,9 +143,6 @@ function PlayPageContent() {
     }
     return new Set([...game.guessed_letters, ...game.wrong_letters]);
   }, [game]);
-
-  const isDailyActive = game?.mode === "daily" || selectedDomain === "daily";
-  const isDailyPending = pendingDomain === "daily" && isStarting;
 
   useEffect(() => {
     if (!flashingLetter) {
@@ -334,7 +305,6 @@ function PlayPageContent() {
       }
 
       if (offline) {
-        setStartError({ domain: domainKey, message: COPY.game.offline.description });
         toast({
           title: COPY.game.offline.title,
           description: COPY.game.offline.description,
@@ -362,7 +332,6 @@ function PlayPageContent() {
         setIsStarting(true);
         setPendingDomain(domainKey);
         setSelectedDomain(domainKey);
-        setStartError(null);
 
         const response = await fetchWithRetry(
           "/api/new-game",
@@ -406,7 +375,6 @@ function PlayPageContent() {
         hintTrackedRef.current.delete(nextState.gameId);
         setActiveGame(nextState.gameId);
         resetGameEffects();
-        setActiveTab("game");
         setSelectedDomain(payload.domain ?? domainKey);
         syncLocalStorage(nextState);
         if (nextState.userId) {
@@ -429,7 +397,6 @@ function PlayPageContent() {
         });
       } catch (error) {
         const message = await resolveFetchErrorMessage(error, "Unable to start game");
-        setStartError({ domain: domainKey, message });
         toast({
           title: COPY.game.startError.title,
           description: COPY.game.startError.description(message),
@@ -536,7 +503,6 @@ function PlayPageContent() {
       hintTrackedRef.current.delete(nextState.gameId);
       setActiveGame(nextState.gameId);
       resetGameEffects();
-      setActiveTab("game");
       syncLocalStorage(nextState);
       if (nextState.userId) {
         setAnalyticsUserId(nextState.userId);
@@ -817,7 +783,6 @@ function PlayPageContent() {
     }
 
     if (offline) {
-      setHydrationError(COPY.game.offline.description);
       setIsHydrating(false);
       return;
     }
@@ -855,7 +820,6 @@ function PlayPageContent() {
         resetGameEffects();
       }
       setSelectedDomain(nextState.domain);
-      setActiveTab("game");
       syncLocalStorage(nextState);
       if (nextState.userId) {
         setAnalyticsUserId(nextState.userId);
@@ -866,7 +830,6 @@ function PlayPageContent() {
       }
     } catch (error) {
       const message = await resolveFetchErrorMessage(error, "Unable to resume game");
-      setHydrationError(message);
       window.localStorage.removeItem(STORAGE_KEY);
       logEvent({
         event: "error",
@@ -884,13 +847,6 @@ function PlayPageContent() {
   useEffect(() => {
     resumeGame();
   }, [resumeGame]);
-
-  useEffect(() => {
-    if (!offline) {
-      setStartError(null);
-      setHydrationError(null);
-    }
-  }, [offline]);
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
@@ -942,363 +898,183 @@ function PlayPageContent() {
     return () => window.removeEventListener("keydown", listener);
   }, [beginNewGame, game, handleGuess, handleGiveUp, selectedDomain]);
 
-  const maskedWordDisplay = useMemo(() => {
-    if (!game) {
-      return null;
-    }
-
-    return game.masked.split("").map((char, index) => {
-      const display = char === "_" ? "" : char;
-      return (
-        <motion.span
-          key={`${index}-${char}`}
-          initial={{ scale: display ? 0.6 : 0.9, opacity: 0 }}
-          animate={
-            display
-              ? { scale: [1.1, 0.95, 1], opacity: 1 }
-              : { scale: 1, opacity: 1 }
-          }
-          transition={{ duration: 0.35, ease: "easeOut" }}
-          className="flex h-12 w-12 items-center justify-center rounded-md border-2 border-dashed border-red/30 bg-white text-2xl font-semibold uppercase shadow-[0_4px_0_rgba(192,57,43,0.35)]"
-        >
-          {display}
-        </motion.span>
-      );
-    });
-  }, [game]);
-
-  const hearts = useMemo(() => {
-    if (!game) {
-      return null;
-    }
-    const lost =
-      game.status === "lost"
-        ? TOTAL_HEARTS
-        : Math.min(game.wrong_guesses_count, TOTAL_HEARTS);
-    const remaining = Math.max(TOTAL_HEARTS - lost, 0);
+  if (isHydrating) {
     return (
-      <div className="flex items-center gap-2">
-        {Array.from({ length: TOTAL_HEARTS }).map((_, index) => {
-          const isActive = index < remaining;
-          return (
-            <span
-              key={index}
-              aria-label={isActive ? "life remaining" : "life lost"}
-              className={`h-6 w-6 rounded-full ${
-                isActive ? "bg-success/80" : "bg-red/40"
-              } shadow-sm`}
-            />
-          );
-        })}
+      <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
-  }, [game]);
-
-  const currentFrame = useMemo(() => {
-    const wrong = Math.min(game?.wrong_guesses_count ?? 0, MAJNU_FRAMES.length - 1);
-    return `/majnu-states/${MAJNU_FRAMES[wrong]}`;
-  }, [game?.wrong_guesses_count]);
-
-  const remainingLives = useMemo(() => {
-    if (!game) {
-      return TOTAL_HEARTS;
-    }
-
-    if (game.status === "lost") {
-      return 0;
-    }
-
-    return Math.max(
-      TOTAL_HEARTS - Math.min(game.wrong_guesses_count, TOTAL_HEARTS),
-      0,
-    );
-  }, [game]);
+  }
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.45, ease: "easeOut" }}
-      className="container max-w-5xl py-10 text-foreground"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex min-h-[calc(100vh-5rem)] flex-col items-center gap-8 px-4 py-8"
     >
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) => setActiveTab(value as "domain" | "game")}
-        className="space-y-6"
-      >
-        <TabsList className="grid w-full grid-cols-2 rounded-full border border-red/30 bg-white/70 shadow-inner">
-          <TabsTrigger value="domain" className="data-[state=active]:bg-red data-[state=active]:text-beige">
-            1. Pick Domain
-          </TabsTrigger>
-          <TabsTrigger
-            value="game"
-            disabled={!game}
-            className="data-[state=active]:bg-red data-[state=active]:text-beige"
-          >
-            2. Play
-          </TabsTrigger>
-        </TabsList>
+      <div className="w-full max-w-4xl space-y-8">
+        {/* Header / Status Bar */}
+        <div className="flex items-center justify-between rounded-sm border-b-2 border-primary/20 bg-background/50 px-6 py-4 backdrop-blur-sm">
+          <div className="flex items-center gap-4">
+            <Badge variant="evidence">
+              {formattedDomain}
+            </Badge>
+            {game?.mode === "daily" && (
+              <Badge variant="destructive" className="animate-pulse">
+                LIVE EXECUTION
+              </Badge>
+            )}
+          </div>
+          <div className="font-mono text-sm font-bold text-primary">
+            {game?.status === "active" ? "STATUS: ACTIVE" : `STATUS: ${game?.status?.toUpperCase() ?? "UNKNOWN"}`}
+          </div>
+        </div>
 
-        <TabsContent value="domain">
-          <Card className="border border-dashed border-red/30 bg-beige/90 shadow-[0_25px_60px_-20px_rgba(192,57,43,0.35)]">
-            <CardHeader>
-              <CardTitle className="font-display text-3xl uppercase tracking-[0.2em] text-red">
-                {COPY.game.domainCard.title}
-              </CardTitle>
-              <CardDescription className="text-foreground/80">
-                {COPY.game.domainCard.description}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void beginDailyGame();
-                  }}
-                  disabled={isStarting || offline}
-                  onMouseEnter={() => setSelectedDomain("daily")}
-                  onFocus={() => setSelectedDomain("daily")}
-                  className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red disabled:opacity-70 ${
-                    isDailyActive
-                      ? "border-red bg-red text-beige"
-                      : "border-red/40 bg-white text-red hover:border-red"
-                  }`}
-                >
-                  <span>{COPY.game.dailyLabel}</span>
-                  {isDailyPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                </button>
-                {domainsLoading
-                  ? Array.from({ length: 4 }).map((_, index) => (
-                      <Skeleton key={index} className="h-10 w-32 rounded-full bg-white/70" />
-                    ))
-                  : domainEntries.map(([domainKey]) => {
-                      const isSelected =
-                        game?.domain === domainKey || selectedDomain === domainKey;
-                      const isPending = pendingDomain === domainKey && isStarting;
-                      return (
-                        <button
-                          key={domainKey}
-                          type="button"
-                          onClick={() => {
-                            void beginNewGame(domainKey);
-                          }}
-                          disabled={isStarting || domainsLoading || offline}
-                          onMouseEnter={() => setSelectedDomain(domainKey)}
-                          onFocus={() => setSelectedDomain(domainKey)}
-                          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red disabled:opacity-70 ${
-                            isSelected
-                              ? "border-red bg-red text-beige"
-                              : "border-red/40 bg-white text-red hover:border-red"
-                          }`}
-                        >
-                          <span>{domainKey}</span>
-                          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        </button>
-                      );
-                    })}
-              </div>
-              {domainsError ? (
-                <p className="rounded-xl border border-red/30 bg-red/10 px-3 py-2 text-sm font-semibold text-red">
-                  {COPY.game.domainCard.loadError}
-                </p>
-              ) : null}
-              {startError && (!selectedDomain || startError.domain === selectedDomain) ? (
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red/30 bg-red/5 px-3 py-2 text-sm text-red">
-                  <span className="font-semibold">{startError.message}</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-red/40 text-red hover:bg-red/10"
-                    onClick={() => {
-                      void beginNewGame(startError.domain);
-                    }}
-                  >
-                    Retry
-                  </Button>
+        <div className="grid gap-8 md:grid-cols-[1fr_300px]">
+          {/* Main Game Area */}
+          <div className="space-y-8">
+            {/* Hangman Visual */}
+            <Card className="relative flex aspect-video items-center justify-center overflow-hidden bg-[#F5E6D3] p-0 shadow-inner">
+              <div className="absolute inset-0 bg-[url('/paper-texture.svg')] opacity-50 mix-blend-multiply" />
+              <div className="relative z-10 h-full w-full p-8">
+                <div className="relative h-full w-full">
+                  <Image
+                    src={`/majnu-states/${MAJNU_FRAMES[Math.min(game?.wrong_guesses_count ?? 0, 5)]}`}
+                    alt="Majnu State"
+                    fill
+                    className="object-contain mix-blend-multiply"
+                    priority
+                  />
                 </div>
-              ) : null}
-              <p className="text-sm text-foreground/60">
-                {selectedDomain === "daily"
-                  ? COPY.game.dailyHint
-                  : selectedDomain
-                    ? selectedDomainHint ?? COPY.game.domainCard.emptyHint
-                    : COPY.game.domainCard.emptyHint}
-              </p>
-            </CardContent>
-            <CardFooter className="flex flex-wrap items-center justify-between gap-3 text-sm text-foreground/70">
-              <span>
-                {COPY.game.keyboard.tipBefore} <kbd>Enter</kbd> {COPY.game.keyboard.tipAfter}
-              </span>
-              <span>{COPY.game.keyboard.shortcuts}</span>
-            </CardFooter>
-          </Card>
-        </TabsContent>
+              </div>
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_50%,rgba(0,0,0,0.2)_100%)]" />
+            </Card>
 
-        <TabsContent value="game">
-          <Card className="border border-dashed border-red/30 bg-white/80 shadow-[0_25px_60px_-20px_rgba(192,57,43,0.35)]">
-            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-baseline md:justify-between">
-              <div>
-                <CardTitle className="font-display text-2xl uppercase tracking-[0.3em] text-red">
-                  {formattedDomain}
-                </CardTitle>
-                <CardDescription className="text-foreground/70">
-                  {COPY.game.statusDescription}
-                </CardDescription>
-                {game?.mode === "daily" ? (
-                  <p className="mt-1 text-xs uppercase tracking-[0.3em] text-foreground/60">
-                    {COPY.game.dailyDomain(toTitleCase(game.domain))} · {COPY.game.dailyBonusNote}
-                  </p>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {isHydrating ? (
-                <div className="grid gap-6 md:grid-cols-[2fr_1fr] md:items-start">
-                  <div className="space-y-4">
-                    <Skeleton className="h-24 w-full rounded-lg" />
-                    <Skeleton className="h-40 w-full rounded-lg" />
-                    <Skeleton className="h-16 w-full rounded-lg" />
-                  </div>
-                  <div className="flex flex-col items-center justify-center gap-4">
-                    <Skeleton className="h-64 w-full rounded-lg" />
-                    <div className="flex items-center gap-2 text-sm text-foreground/60">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Majnu&rsquo;s thinking…</span>
-                    </div>
-                  </div>
-                </div>
-              ) : !game ? (
-                <div className="rounded-lg border border-dashed border-red/30 bg-beige/90 p-6 text-center text-foreground">
-                  <p className="text-lg font-semibold text-red">
-                    {COPY.game.emptyState.title}
-                  </p>
-                  {hydrationError && (
-                    <p className="mt-2 text-sm text-red">{hydrationError}</p>
+            {/* Word Display - Ransom Note Style */}
+            <div className="flex flex-wrap justify-center gap-3 min-h-[4rem]">
+              {game?.masked.split("").map((char, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: i * 0.05 }}
+                  className={cn(
+                    "flex h-12 w-10 items-center justify-center text-2xl font-bold shadow-sm",
+                    char === "_"
+                      ? "border-b-4 border-primary/40 bg-transparent text-transparent"
+                      : "bg-white text-foreground rotate-1 border border-gray-300 font-display transform even:-rotate-1"
                   )}
-                </div>
-              ) : (
-                <div className="grid gap-6 md:grid-cols-[2fr_1fr] md:items-start">
-                  <div className="space-y-6">
-                    <TooltipProvider>
-                      <Tooltip delayDuration={100}>
-                        <TooltipTrigger asChild>
-                          <div className="flex items-center justify-between rounded-lg border border-dashed border-red/30 bg-white/60 px-4 py-3 text-sm font-semibold text-red">
-                            <span className="flex items-center gap-2">
-                              <span aria-hidden>💀</span>
-                              {COPY.game.wrongBar(game.wrong_guesses_count, MAX_WRONG_GUESSES)}
-                            </span>
-                            {hearts}
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">
-                          Lives left: {remainingLives}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                >
+                  {char === "_" ? "" : char}
+                </motion.div>
+              ))}
+            </div>
 
-                    {game && (
-                      <div className="flex justify-center">
-                        <div
-                          className={cn(
-                            "relative w-full max-w-xl rounded-2xl border border-red/20 bg-[#FFF4C4] px-5 py-4 text-left shadow-[0_12px_30px_-18px_rgba(192,57,43,0.45)]",
-                            isStarting && "animate-pulse",
-                          )}
-                        >
-                          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-red/70">
-                            {COPY.game.hintLabel(game.hint)}
-                          </p>
-                          <span className="absolute -top-3 left-8 h-6 w-12 rounded-full bg-[#FADB82] opacity-70 blur-[2px]" />
-                        </div>
-                      </div>
+            {/* Hint Section */}
+            {game?.hint && (
+              <div className="relative rounded-sm border border-primary/20 bg-primary/5 p-4 font-mono text-sm text-primary/80">
+                <span className="absolute -top-2 left-4 bg-background px-2 text-[10px] font-bold uppercase tracking-widest text-primary">
+                  CLUE FOUND
+                </span>
+                <p className="italic">&quot;{game.hint}&quot;</p>
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar / Controls */}
+          <div className="space-y-6">
+            {/* Keyboard */}
+            <div className="grid grid-cols-5 gap-2">
+              {LETTERS.map((letter) => {
+                const isGuessed = guessedLetterSet.has(letter.toLowerCase());
+                const isWrong = game?.wrong_letters.includes(letter.toLowerCase());
+                const isCorrect = game?.guessed_letters.includes(letter.toLowerCase());
+
+                return (
+                  <Button
+                    key={letter}
+                    variant={isGuessed ? "outline" : "stamp"}
+                    disabled={isGuessed || game?.status !== "active" || isGuessing}
+                    onClick={() => {
+                      playTypewriter();
+                      void handleGuess(letter);
+                    }}
+                    className={cn(
+                      "h-12 w-full text-lg font-bold transition-all",
+                      isCorrect && "border-green-600 text-green-600 bg-green-50 opacity-100",
+                      isWrong && "border-red-200 text-red-200 opacity-50 decoration-slice line-through",
+                      flashingLetter === letter.toLowerCase() && "animate-shake bg-red-100 text-red-600"
                     )}
+                  >
+                    {letter}
+                  </Button>
+                );
+              })}
+            </div>
 
-                    <div className="flex flex-wrap justify-center gap-2">
-                      {maskedWordDisplay}
-                    </div>
+            {/* Game Controls */}
+            <div className="space-y-4 border-t-2 border-dashed border-primary/10 pt-6">
+              <div className="flex justify-between text-xs font-mono uppercase tracking-widest text-foreground/60">
+                <span>Mistakes</span>
+                <span>{game?.wrong_guesses_count ?? 0} / {MAX_WRONG_GUESSES}</span>
+              </div>
+              {/* Health Bar / Mistakes Visual */}
+              <div className="flex gap-1">
+                {Array.from({ length: MAX_WRONG_GUESSES }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "h-2 flex-1 rounded-full transition-colors",
+                      i < (game?.wrong_guesses_count ?? 0) ? "bg-destructive" : "bg-primary/10"
+                    )}
+                  />
+                ))}
+              </div>
 
-                    <div className="flex flex-wrap justify-center gap-2">
-                      {LETTERS.map((letter) => {
-                        const normalized = letter.toLowerCase();
-                        const isSelected = guessedLetterSet.has(normalized);
-                        const isFlashing = flashingLetter === normalized;
-                        return (
-                          <motion.div
-                            key={letter}
-                            animate={
-                              isFlashing
-                                ? { x: [0, -4, 4, -4, 4, 0], rotate: [0, -2, 2, -2, 2, 0] }
-                                : { x: 0, rotate: 0 }
-                            }
-                            transition={{ duration: 0.4, ease: "easeOut" }}
-                          >
-                            <Button
-                              variant="outline"
-                              disabled={
-                                isSelected ||
-                                game.status !== "active" ||
-                                isGuessing
-                              }
-                              aria-pressed={isSelected}
-                              onClick={() => handleGuess(letter)}
-                              className={cn(
-                                "h-10 w-10 p-0 text-sm font-semibold uppercase transition-colors",
-                                isSelected && "bg-red/20 text-red border-red/40",
-                                isFlashing && "border-red bg-red text-beige"
-                              )}
-                            >
-                              {letter}
-                            </Button>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-red/30 bg-beige/80 p-4 shadow-[0_20px_40px_-20px_rgba(192,57,43,0.45)]">
-                    <motion.div
-                      key={currentFrame}
-                      initial={{ opacity: 0, y: 16 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.45, ease: "easeOut" }}
-                      className="w-full"
-                    >
-                      <Image
-                        src={currentFrame}
-                        alt="Majnu Bhai execution state"
-                        width={260}
-                        height={260}
-                        className="h-auto w-full max-w-[260px] rounded-md border border-red/30 bg-beige object-contain shadow-[0_15px_30px_-10px_rgba(0,0,0,0.25)]"
-                        priority
-                      />
-                    </motion.div>
-                    <Button
-                      variant="destructive"
-                      onClick={handleGiveUp}
-                      disabled={!game || game.status !== "active"}
-                      className="w-full"
-                    >
-                      Pull the Lever
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        if (selectedDomain) {
-                          void beginNewGame(selectedDomain);
-                        }
-                      }}
-                      disabled={!selectedDomain || isStarting || domainsLoading || offline}
-                      className="w-full"
-                    >
-                      Replay domain
-                    </Button>
-                  </div>
-                </div>
+              {game?.status === "active" && (
+                <Button
+                  variant="ghost"
+                  className="w-full text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => void handleGiveUp()}
+                >
+                  FORFEIT CASE
+                </Button>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {!game && !isStarting && (
+        <div className="mt-12 text-center">
+          <h2 className="font-display text-3xl text-primary mb-6">SELECT A CASE FILE</h2>
+          <div className="flex flex-wrap justify-center gap-4">
+            {domainEntries.map(([key, data]) => (
+              <Button
+                key={key}
+                variant="paper"
+                className="h-auto flex-col items-start gap-1 p-4 w-40"
+                onClick={() => beginNewGame(key)}
+              >
+                <span className="font-display text-lg uppercase">{toTitleCase(key)}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {data.words.length} SUSPECTS
+                </span>
+              </Button>
+            ))}
+            <Button
+              variant="paper"
+              className="h-auto flex-col items-start gap-1 p-4 w-40 border-red-500/50"
+              onClick={() => beginDailyGame()}
+            >
+              <span className="font-display text-lg uppercase text-red-600">DAILY EXECUTION</span>
+              <span className="font-mono text-[10px] text-muted-foreground">
+                ONE CHANCE
+              </span>
+            </Button>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }

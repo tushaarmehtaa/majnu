@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 
 import { useSound } from "@/hooks/use-sound";
+import { SOUNDS, SOUND_VOLUMES } from "@/lib/sounds";
 
 type ResultEffectsProps = {
   outcome: "win" | "loss";
@@ -18,12 +19,13 @@ type ConfettiPiece = {
   color: string;
 };
 
-const CONFETTI_COLORS = ["#F97316", "#22C55E", "#FACC15", "#EF4444", "#38BDF8"];
+const CONFETTI_COLORS = ["#8B0000", "#D4AF37", "#F5E6D3", "#1A1A1A", "#B80000"];
 
 export function ResultEffects({ outcome }: ResultEffectsProps) {
-  const { play } = useSound(outcome === "win" ? "/audio/win.mp3" : "/audio/loss.mp3", {
-    volume: outcome === "win" ? 0.85 : 0.9,
-  });
+  const { play } = useSound(
+    outcome === "win" ? SOUNDS.win : SOUNDS.loss,
+    { volume: SOUND_VOLUMES.outcome }
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

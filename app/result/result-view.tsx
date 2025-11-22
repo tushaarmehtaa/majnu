@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -11,8 +11,11 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 
 import { ResultEffects } from "@/app/result/result-effects";
 import { ShareButton } from "@/app/result/share-button";
+import { cn } from "@/lib/utils";
 import { COPY } from "@/lib/copy";
 import { logEvent } from "@/lib/analytics";
+import { useSound } from "@/hooks/use-sound";
+import { SOUNDS, SOUND_VOLUMES } from "@/lib/sounds";
 
 const FOLLOW_URL = "https://x.com/intent/follow?screen_name=savemajnu";
 
@@ -50,22 +53,20 @@ type ResultViewProps = {
 };
 
 export function ResultView({
-  statusLabel,
   outcome,
   streak,
   heroImage,
   gameInfo,
   share,
   throttled,
-  playerHandle,
-  avatar,
 }: ResultViewProps) {
-  const bgClass = outcome === "win" ? "bg-success/20" : "bg-red/10";
-  const borderClass = outcome === "win" ? "border-success/40" : "border-red/40";
-  const headlineBadge = outcome === "win" ? "bg-success/20 text-success" : "bg-red/20 text-red";
-  const title = outcome === "win" ? COPY.result.title.win : COPY.result.title.loss;
-  const description = outcome === "win" ? COPY.result.winDescription : COPY.result.lossDescription;
-  const subtitle = outcome === "win" ? COPY.result.subtitle.win : COPY.result.subtitle.loss;
+  const isWin = outcome === "win";
+  const verdictColor = isWin ? "text-green-700" : "text-destructive";
+  const verdictBorder = isWin ? "border-green-700" : "border-destructive";
+  const verdictBg = isWin ? "bg-green-50" : "bg-destructive/5";
+
+  const { play: playVerdictStamp } = useSound(SOUNDS.verdictStamp, { volume: SOUND_VOLUMES.stamp });
+
   const handleFollowClick = useCallback(() => {
     logEvent({
       event: "follow_clicked",
@@ -83,148 +84,142 @@ export function ResultView({
     }
   }, [outcome, share.userId]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      playVerdictStamp();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [playVerdictStamp]);
+
   return (
-    <div className="relative">
+    <div className="relative flex min-h-screen flex-col items-center justify-center p-4">
       <ResultEffects outcome={outcome} />
+
       <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.55, ease: "easeOut" }}
-        className={`container relative z-20 max-w-3xl rounded-3xl py-16 ${bgClass} shadow-[0_30px_80px_-30px_rgba(192,57,43,0.5)]`}
+        initial={{ opacity: 0, scale: 0.95, rotate: 1 }}
+        animate={{ opacity: 1, scale: 1, rotate: 0 }}
+        transition={{ duration: 0.6, type: "spring" }}
+        className="relative z-20 w-full max-w-2xl"
       >
-        <Card className={`border ${borderClass} bg-white/85 backdrop-blur`}>
-          <CardContent className="space-y-8 p-8 text-center">
-            <div className="flex flex-col items-center gap-4">
-              <Badge className={`${headlineBadge} px-4 py-1 uppercase tracking-[0.4em]`}>
-                {statusLabel}
-              </Badge>
-              {playerHandle ? (
-                <div className="flex items-center gap-2">
-                  {avatar ? (
-                    <span
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white"
-                      style={{ backgroundColor: avatar.color }}
-                    >
-                      {avatar.initials}
-                    </span>
-                  ) : null}
-                  <span className="text-sm font-semibold text-foreground/80">@{playerHandle}</span>
-                </div>
-              ) : null}
-              <h1 className="font-display text-4xl uppercase tracking-[0.2em] text-red sm:text-5xl">
-                {title}
-              </h1>
-              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-foreground/50">
-                {subtitle}
-              </p>
-              <p className="text-base text-foreground/80">{description}</p>
-              {streak ? (
-                <div className="grid gap-2 text-xs uppercase tracking-[0.3em] text-foreground/60 sm:grid-cols-2">
-                  <span className="rounded-full border border-red/30 bg-white/70 px-3 py-1 text-center font-semibold">
-                    Current streak: {streak.current}
-                  </span>
-                  <span className="rounded-full border border-red/30 bg-white/70 px-3 py-1 text-center font-semibold">
-                    Best streak: {streak.best}
-                  </span>
-                </div>
-              ) : null}
-              {throttled ? (
-                <p className="rounded-full border border-red/30 bg-red/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-red">
-                  Slow down, hero. This finish didn&apos;t count.
-                </p>
-              ) : null}
-              <div className="mt-2 flex justify-center">
+        {/* Verdict Stamp Animation */}
+        <motion.div
+          initial={{ scale: 2, opacity: 0, rotate: -15 }}
+          animate={{ scale: 1, opacity: 1, rotate: -5 }}
+          transition={{ delay: 0.3, type: "spring", bounce: 0.5 }}
+          className={cn(
+            "absolute -right-4 -top-6 z-30 rounded-sm border-4 px-4 py-2 font-display text-2xl uppercase tracking-widest shadow-xl backdrop-blur-sm md:-right-8 md:-top-8 md:text-4xl",
+            verdictColor,
+            verdictBorder,
+            verdictBg
+          )}
+        >
+          {isWin ? "PARDONED" : "EXECUTED"}
+        </motion.div>
+
+        <Card className="overflow-hidden border-2 border-primary/20 bg-[#F5E6D3] shadow-2xl">
+          <div className="absolute inset-0 bg-[url('/paper-texture.svg')] opacity-50 mix-blend-multiply" />
+
+          <CardContent className="relative space-y-8 p-8">
+            {/* Header Section */}
+            <div className="flex flex-col items-center gap-6 text-center">
+              <div className="relative h-48 w-full overflow-hidden rounded-sm border-2 border-primary/10 bg-white shadow-inner md:h-64">
                 <Image
                   src={heroImage}
-                  alt={outcome === "win" ? "Majnu celebrating" : "Majnu hanging"}
-                  width={320}
-                  height={260}
-                  className="rounded-2xl shadow-[0_20px_40px_-20px_rgba(30,30,30,0.45)]"
+                  alt={isWin ? "Majnu celebrating" : "Majnu hanging"}
+                  fill
+                  className="object-cover sepia-[0.3]"
+                  priority
                 />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.2)_100%)]" />
+              </div>
+
+              <div className="space-y-2">
+                <Badge variant="evidence" className="mb-2">
+                  CASE FILE #{gameInfo?.domainRaw.toUpperCase().slice(0, 3)}-{Math.floor(Math.random() * 1000)}
+                </Badge>
+                <h1 className="font-display text-4xl uppercase tracking-tight text-primary md:text-5xl">
+                  {isWin ? "Justice Served" : "Tragic End"}
+                </h1>
+                <p className="font-mono text-sm text-foreground/70">
+                  {isWin
+                    ? "Majnu lives to paint another donkey."
+                    : "The rope was tight. The crowd was silent."}
+                </p>
               </div>
             </div>
 
-            {gameInfo ? (
-              <div
-                className={`rounded-2xl border ${borderClass} bg-white/90 p-6 text-left text-foreground shadow-[0_12px_24px_-16px_rgba(0,0,0,0.35)]`}
-              >
-                {gameInfo.mode === "daily" ? (
-                  <Badge className="mb-3 bg-red/10 text-red">Daily Word</Badge>
-                ) : null}
-                <p className="text-lg font-semibold">Domain: {gameInfo.domainLabel}</p>
-                <p className="mt-3 text-sm font-semibold uppercase tracking-[0.3em] text-red">
-                  {COPY.result.answerLabel(gameInfo.answer)}
+            {/* Stats Grid */}
+            <div className="grid grid-cols-3 gap-4 border-y-2 border-dashed border-primary/20 py-6">
+              <div className="text-center">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-foreground/50">Score</p>
+                <p className="font-display text-2xl text-primary">
+                  {share.scoreTotal ?? "—"}
                 </p>
-                {outcome === "loss" ? (
-                  <p className="text-xs italic text-foreground/60">Remember it. Majnu didn’t.</p>
-                ) : null}
-                <p className="mt-2 text-sm text-foreground/70">Wrong guesses: {gameInfo.wrongGuesses}</p>
-                <p className="text-sm font-semibold text-foreground/80">
-                  Hint: {gameInfo.hint}
+                {share.scoreDelta !== null && (
+                  <span className={cn("text-xs font-bold", share.scoreDelta >= 0 ? "text-green-600" : "text-red-600")}>
+                    {share.scoreDelta >= 0 ? "+" : ""}{share.scoreDelta}
+                  </span>
+                )}
+              </div>
+              <div className="text-center border-x border-dashed border-primary/20">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-foreground/50">Streak</p>
+                <p className="font-display text-2xl text-primary">
+                  {streak?.current ?? 0}
+                </p>
+                <span className="text-xs text-foreground/50">Best: {streak?.best ?? 0}</span>
+              </div>
+              <div className="text-center">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-foreground/50">Rank</p>
+                <p className="font-display text-2xl text-primary">
+                  #{share.rank ?? "—"}
                 </p>
               </div>
-            ) : (
-              <div className="rounded-2xl border border-red/30 bg-white/80 p-6 text-center text-foreground/80">
-                We could not load the final scene. Start a new round to rewrite Majnu’s fate.
+            </div>
+
+            {/* Game Details */}
+            {gameInfo && (
+              <div className="rounded-sm bg-primary/5 p-4 font-mono text-sm">
+                <div className="flex justify-between border-b border-primary/10 pb-2 mb-2">
+                  <span className="text-foreground/60">SUBJECT:</span>
+                  <span className="font-bold text-primary">{gameInfo.domainLabel}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-foreground/60">ANSWER:</span>
+                  <span className="font-bold text-primary tracking-widest uppercase">{gameInfo.answer}</span>
+                </div>
               </div>
             )}
 
-            <div className="grid gap-4 rounded-2xl border border-dashed border-red/20 bg-white/60 p-4 text-sm text-foreground/80 sm:grid-cols-3">
-              <div className="text-center">
-                <p className="text-xs uppercase tracking-[0.3em] text-foreground/60">Score Change</p>
-                <p className="mt-1 text-lg font-semibold text-red">
-                  {share.scoreDelta !== null && share.scoreDelta !== undefined
-                    ? `${share.scoreDelta >= 0 ? "+" : ""}${share.scoreDelta}`
-                    : "—"}
-                </p>
+            {throttled && (
+              <div className="rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-center font-mono text-xs text-destructive">
+                ⚠️ SPEED LIMIT ENFORCED. SCORE NOT RECORDED.
               </div>
-              <div className="text-center">
-                <p className="text-xs uppercase tracking-[0.3em] text-foreground/60">Total Score</p>
-                <p className="mt-1 text-lg font-semibold text-red">
-                  {share.scoreTotal ?? "—"}
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs uppercase tracking-[0.3em] text-foreground/60">Rank</p>
-                <p className="mt-1 text-lg font-semibold text-red">
-                  {share.rank ?? "Unranked"}
-                </p>
-              </div>
-            </div>
+            )}
+          </CardContent>
 
-            <div className="space-y-3 rounded-2xl border border-red/20 bg-white/75 p-6 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-red">Keep Majnu in the headlines</p>
-              <p className="text-sm text-foreground/70">
-                Follow rope alerts and post-mortem threads so you know the moment Majnu stumbles.
-              </p>
-              <Button
-                variant="secondary"
-                className="bg-red/10 text-red hover:bg-red/20"
-                onClick={handleFollowClick}
-              >
-                Follow @savemajnu
+          <CardFooter className="relative flex flex-col gap-3 bg-primary/5 p-6 sm:flex-row sm:justify-between">
+            <Button variant="outline" className="w-full sm:w-auto" asChild>
+              <Link href="/play">NEW CASE</Link>
+            </Button>
+
+            <div className="flex w-full gap-2 sm:w-auto">
+              <ShareButton
+                outcome={share.outcome}
+                scoreDelta={share.scoreDelta}
+                scoreTotal={share.scoreTotal}
+                rank={share.rank}
+                shareUrl={share.url}
+                userId={share.userId}
+                handle={share.handle}
+                wins={share.wins}
+                losses={share.losses}
+                streak={share.streak}
+              />
+              <Button variant="ghost" size="icon" onClick={handleFollowClick} title="Follow Updates">
+                <span className="sr-only">Follow</span>
+                🐦
               </Button>
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-wrap items-center justify-center gap-3 bg-white/70 p-6">
-            <Button size="lg" className="bg-red text-beige hover:bg-red/90" asChild>
-              <Link href="/play">Play Again</Link>
-            </Button>
-            <ShareButton
-              outcome={share.outcome}
-              scoreDelta={share.scoreDelta}
-              scoreTotal={share.scoreTotal}
-              rank={share.rank}
-              shareUrl={share.url}
-              userId={share.userId}
-              handle={share.handle}
-              wins={share.wins}
-              losses={share.losses}
-              streak={share.streak}
-            />
-            <Button variant="outline" className="border-red/40 text-red hover:bg-red/10" asChild>
-              <Link href="/leaderboard">View Leaderboards</Link>
-            </Button>
           </CardFooter>
         </Card>
       </motion.div>

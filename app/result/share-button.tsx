@@ -9,6 +9,7 @@ import { COPY } from "@/lib/copy";
 import { buildShareCopy } from "@/lib/share";
 import { useOffline } from "@/hooks/use-offline";
 import { fetchWithRetry, resolveFetchErrorMessage } from "@/lib/http";
+import { cn } from "@/lib/utils";
 
 type ShareButtonProps = {
   outcome: "win" | "loss";
@@ -141,12 +142,12 @@ export function ShareButton({
   return (
     <Button
       type="button"
-      variant="secondary"
+      variant="stamp"
       onClick={handleShare}
-      className={className}
+      className={cn("bg-primary text-primary-foreground hover:bg-primary/90", className)}
       disabled={isCreating}
     >
-      {shareError ? "Retry Share" : COPY.share.button}
+      {shareError ? "RETRY DISPATCH" : "BROADCAST VERDICT"}
     </Button>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bebas_Neue, Geist, Geist_Mono, Inter, Shrikhand } from "next/font/google";
+import { Bebas_Neue, Courier_Prime, Geist, Geist_Mono, Inter, Shrikhand } from "next/font/google";
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 
@@ -35,15 +35,21 @@ const shrikhand = Shrikhand({
   subsets: ["latin"],
 });
 
+const courier = Courier_Prime({
+  variable: "--font-courier",
+  weight: "400",
+  subsets: ["latin"],
+});
+
 const siteUrl = "https://savemajnu.live";
-const title = "Save Majnu Bhai — Feels Real";
+const title = "Save Majnu Bhai — The Bombay Noir Edition";
 const description =
   "Bollywood gallows humor tightened for launch. Guess the word in five mistakes or Majnu Bhai swings.";
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#C0392B" },
-    { media: "(prefers-color-scheme: dark)", color: "#C0392B" },
+    { media: "(prefers-color-scheme: light)", color: "#8B0000" },
+    { media: "(prefers-color-scheme: dark)", color: "#1A1A1A" },
   ],
 };
 
@@ -121,27 +127,34 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${bebas.variable} ${shrikhand.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${bebas.variable} ${shrikhand.variable} ${courier.variable} antialiased`}
       >
         <ClientProviders>
-          <div className="min-h-screen bg-gradient-to-br from-[#FDF7E4] via-[#FFF9E0] to-[#FFF1CC] text-foreground">
-            <header className="sticky top-0 z-40 border-b border-red/10 bg-white/70 backdrop-blur">
+          <div className="relative min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
+            {/* Global Texture Overlay */}
+            <div className="pointer-events-none fixed inset-0 z-50 opacity-[0.03] mix-blend-overlay" style={{ backgroundImage: "url(/noise.svg)" }} />
+            <div className="pointer-events-none fixed inset-0 z-40 opacity-20 mix-blend-multiply" style={{ backgroundImage: "url(/paper-texture.svg)" }} />
+
+            {/* Vignette */}
+            <div className="pointer-events-none fixed inset-0 z-40 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]" />
+
+            <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur-sm">
               <nav className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4">
-                <Link href="/" className="font-display text-2xl uppercase tracking-[0.3em] text-red">
+                <Link href="/" className="font-display text-2xl uppercase tracking-[0.1em] text-primary transition-transform hover:scale-105">
                   Save Majnu Bhai
                 </Link>
-                <div className="flex items-center gap-4 text-sm font-medium">
-                  <Link href="/play" className="hover:text-red">
-                    Play
+                <div className="flex items-center gap-6 text-sm font-medium font-mono tracking-tight">
+                  <Link href="/play" className="hover:text-primary hover:underline decoration-2 underline-offset-4">
+                    PLAY
                   </Link>
-                  <Link href="/leaderboard" className="hover:text-red">
-                    Leaderboard
+                  <Link href="/leaderboard" className="hover:text-primary hover:underline decoration-2 underline-offset-4">
+                    WANTED LIST
                   </Link>
                   <SoundToggle />
                 </div>
               </nav>
             </header>
-            <main>
+            <main className="relative z-10">
               <RouteTransition>
                 <ErrorBoundary>{children}</ErrorBoundary>
               </RouteTransition>
