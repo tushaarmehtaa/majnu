@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Bebas_Neue, Geist, Geist_Mono, Inter, Shrikhand } from "next/font/google";
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 import { SoundToggle } from "@/components/sound/sound-toggle";
 import { ErrorBoundary } from "@/lib/errorBoundary";
@@ -40,6 +40,13 @@ const title = "Save Majnu Bhai — Feels Real";
 const description =
   "Bollywood gallows humor tightened for launch. Guess the word in five mistakes or Majnu Bhai swings.";
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#C0392B" },
+    { media: "(prefers-color-scheme: dark)", color: "#C0392B" },
+  ],
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
@@ -73,10 +80,6 @@ export const metadata: Metadata = {
     apple: [{ url: "/icons/icon-192.png", sizes: "192x192" }],
     shortcut: ["/favicon.ico"],
   },
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#C0392B" },
-    { media: "(prefers-color-scheme: dark)", color: "#C0392B" },
-  ],
   openGraph: {
     title,
     description,

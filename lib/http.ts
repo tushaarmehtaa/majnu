@@ -84,10 +84,10 @@ export async function resolveFetchErrorMessage(error: unknown, fallback: string)
     try {
       const data = await error.response.clone().json().catch(() => null);
       if (data && typeof data === "object") {
+        const errObj = data as { error?: unknown; message?: unknown };
         const candidate =
-          (typeof (data as { error?: string }).error === "string" && (data as { error?: string }).error.trim()) ||
-          (typeof (data as { message?: string }).message === "string" &&
-            (data as { message?: string }).message.trim());
+          (typeof errObj.error === "string" && errObj.error.trim()) ||
+          (typeof errObj.message === "string" && errObj.message.trim());
         if (candidate) {
           return candidate;
         }
