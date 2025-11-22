@@ -25,7 +25,10 @@ export function buildShareCopy(context: ShareContext): string {
   const score = safeValue(context.scoreTotal, "0");
   const delta = safeValue(context.scoreDelta, "0");
   const rank = safeValue(context.rank, "unranked");
-  const subject = saved ? `Majnu Bhai was saved today by ${handle}.` : `Majnu Bhai couldn't be saved today.`;
-  const summary = `Score ${score} (Δ${delta}) · Rank ${rank} · Wins ${wins} · Losses ${losses} · Streak ${streak}.`;
-  return `${subject} ${summary}`;
+
+  if (saved) {
+    return `Just saved Majnu Bhai. +${delta} Rep. Rank #${rank}. Streak ${streak}. Can you beat the drop? #SaveMajnu`;
+  } else {
+    return `I let Majnu Bhai down. The rope won. Rank #${rank}. A dark day. #SaveMajnu`;
+  }
 }

@@ -7,10 +7,14 @@ import { useIsClient } from "@/hooks/use-is-client";
 
 type UseSoundOptions = {
   volume?: number;
+  playbackRate?: number;
+  randomPitchVariance?: number;
 };
 
 export function useSound(src: string, options?: UseSoundOptions) {
   const volume = options?.volume ?? 1.0;
+  const baseRate = options?.playbackRate ?? 1.0;
+  const variance = options?.randomPitchVariance ?? 0;
   const isClient = useIsClient();
 
   useEffect(() => {
@@ -20,8 +24,11 @@ export function useSound(src: string, options?: UseSoundOptions) {
 
   const play = useCallback(() => {
     if (!isClient) return;
-    soundManager.play(src, volume).catch(() => null);
-  }, [isClient, src, volume]);
+    const rate = variance > 0
+      ? baseRate + (Math.random() * variance * 2 - variance)
+      : baseRate;
+    soundManager.play(src, volume, { playbackRate: rate }).catch(() => null);
+  }, [isClient, src, volume, baseRate, variance]);
 
   return { play };
 }

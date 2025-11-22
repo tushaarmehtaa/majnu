@@ -151,7 +151,10 @@ export default function LandingPage() {
           </div>
 
           <p className="max-w-xl text-balance font-mono text-lg text-foreground/80">
-            {COPY.landing.subtitle} — <span className="text-primary">5 mistakes</span> and the rope snaps.
+            {COPY.landing.subtitle}
+          </p>
+          <p className="font-mono text-sm text-primary">
+            {COPY.landing.line}
           </p>
         </header>
 
@@ -242,6 +245,6 @@ export default function LandingPage() {
           <p>EST. 2025 • BOMBAY POLICE DEPT • CASE #8921</p>
         </footer>
       </motion.section>
-    </motion.main>
+    </motion.main >
   );
 }

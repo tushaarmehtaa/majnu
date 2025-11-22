@@ -147,7 +147,7 @@ export function ShareButton({
       className={cn("bg-primary text-primary-foreground hover:bg-primary/90", className)}
       disabled={isCreating}
     >
-      {shareError ? "RETRY DISPATCH" : "BROADCAST VERDICT"}
+      {shareError ? "RETRY SIGNAL" : "SEND WORD"}
     </Button>
   );
 }

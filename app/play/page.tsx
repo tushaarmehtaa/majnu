@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { MAX_WRONG_GUESSES, type GameStatus } from "@/lib/game";
+import { MajnuHangman } from "@/components/majnu-hangman";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -66,7 +67,7 @@ const STORAGE_KEY = "majnu-active-game";
 const LETTERS = Array.from({ length: 26 }, (_, index) =>
   String.fromCharCode(65 + index),
 );
-const MAJNU_FRAMES = ["0.webp", "1.webp", "2.webp", "3.webp", "4.webp", "5.webp"] as const;
+const MAJNU_FRAMES = ["0.webp", "1.png", "2.png", "3.png", "4.webp", "5.webp"] as const;
 
 const TOTAL_HEARTS = MAX_WRONG_GUESSES;
 
@@ -103,7 +104,10 @@ function PlayPageContent() {
   const { play: playWrong } = useSound(SOUNDS.wrongGuess, { volume: SOUND_VOLUMES.feedback });
   const { play: playWin } = useSound(SOUNDS.win, { volume: SOUND_VOLUMES.outcome });
   const { play: playLoss } = useSound(SOUNDS.loss, { volume: SOUND_VOLUMES.outcome });
-  const { play: playTypewriter } = useSound(SOUNDS.typewriterKey, { volume: SOUND_VOLUMES.ui });
+  const { play: playTypewriter } = useSound(SOUNDS.typewriterKey, {
+    volume: SOUND_VOLUMES.ui,
+    randomPitchVariance: 0.15 // 15% pitch variation for natural typing feel
+  });
   const triggerConfetti = useCallback(async () => {
     const { default: confetti } = await import("canvas-confetti");
     confetti({
@@ -921,12 +925,12 @@ function PlayPageContent() {
             </Badge>
             {game?.mode === "daily" && (
               <Badge variant="destructive" className="animate-pulse">
-                LIVE EXECUTION
+                ACTIVE CONTRACT
               </Badge>
             )}
           </div>
           <div className="font-mono text-sm font-bold text-primary">
-            {game?.status === "active" ? "STATUS: ACTIVE" : `STATUS: ${game?.status?.toUpperCase() ?? "UNKNOWN"}`}
+            {game?.status === "active" ? "STATUS: ON THE HUNT" : `STATUS: ${game?.status?.toUpperCase() ?? "UNKNOWN"}`}
           </div>
         </div>
 
@@ -934,18 +938,11 @@ function PlayPageContent() {
           {/* Main Game Area */}
           <div className="space-y-8">
             {/* Hangman Visual */}
+            {/* Hangman Visual */}
             <Card className="relative flex aspect-video items-center justify-center overflow-hidden bg-[#F5E6D3] p-0 shadow-inner">
               <div className="absolute inset-0 bg-[url('/paper-texture.svg')] opacity-50 mix-blend-multiply" />
               <div className="relative z-10 h-full w-full p-8">
-                <div className="relative h-full w-full">
-                  <Image
-                    src={`/majnu-states/${MAJNU_FRAMES[Math.min(game?.wrong_guesses_count ?? 0, 5)]}`}
-                    alt="Majnu State"
-                    fill
-                    className="object-contain mix-blend-multiply"
-                    priority
-                  />
-                </div>
+                <MajnuHangman mistakes={game?.wrong_guesses_count ?? 0} />
               </div>
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_50%,rgba(0,0,0,0.2)_100%)]" />
             </Card>
@@ -1015,7 +1012,7 @@ function PlayPageContent() {
             {/* Game Controls */}
             <div className="space-y-4 border-t-2 border-dashed border-primary/10 pt-6">
               <div className="flex justify-between text-xs font-mono uppercase tracking-widest text-foreground/60">
-                <span>Mistakes</span>
+                <span>Strikes</span>
                 <span>{game?.wrong_guesses_count ?? 0} / {MAX_WRONG_GUESSES}</span>
               </div>
               {/* Health Bar / Mistakes Visual */}
@@ -1037,7 +1034,7 @@ function PlayPageContent() {
                   className="w-full text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                   onClick={() => void handleGiveUp()}
                 >
-                  FORFEIT CASE
+                  ABORT MISSION
                 </Button>
               )}
             </div>
@@ -1058,7 +1055,7 @@ function PlayPageContent() {
               >
                 <span className="font-display text-lg uppercase">{toTitleCase(key)}</span>
                 <span className="font-mono text-[10px] text-muted-foreground">
-                  {data.words.length} SUSPECTS
+                  {data.words.length} TARGETS
                 </span>
               </Button>
             ))}
@@ -1067,9 +1064,9 @@ function PlayPageContent() {
               className="h-auto flex-col items-start gap-1 p-4 w-40 border-red-500/50"
               onClick={() => beginDailyGame()}
             >
-              <span className="font-display text-lg uppercase text-red-600">DAILY EXECUTION</span>
+              <span className="font-display text-lg uppercase text-red-600">DAILY HIT</span>
               <span className="font-mono text-[10px] text-muted-foreground">
-                ONE CHANCE
+                ONE SHOT
               </span>
             </Button>
           </div>

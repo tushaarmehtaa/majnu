@@ -70,7 +70,7 @@ class SoundManager {
     return this.muted;
   }
 
-  async play(source: string, volume = 1.0) {
+  async play(source: string, volume = 1.0, options?: { playbackRate?: number }) {
     if (typeof window === "undefined" || this.muted) return;
     const ctx = await this.ensureContext();
     if (!this.unlocked) {
@@ -94,19 +94,25 @@ class SoundManager {
 
     const node = ctx.createBufferSource();
     node.buffer = buffer;
+    if (options?.playbackRate) {
+      node.playbackRate.value = options.playbackRate;
+    }
 
     const volumeNode = ctx.createGain();
     const clampedVolume = Math.max(0, Math.min(1, volume));
     const currentTime = ctx.currentTime;
+
+    // Smoother attack and release to avoid clicks
     volumeNode.gain.setValueAtTime(0, currentTime);
-    volumeNode.gain.linearRampToValueAtTime(clampedVolume, currentTime + 0.08);
-    volumeNode.gain.setValueAtTime(clampedVolume, currentTime + Math.max(0, buffer.duration - 0.12));
+    volumeNode.gain.linearRampToValueAtTime(clampedVolume, currentTime + 0.02);
+    volumeNode.gain.setValueAtTime(clampedVolume, currentTime + Math.max(0, buffer.duration - 0.1));
     volumeNode.gain.linearRampToValueAtTime(0.0001, currentTime + buffer.duration);
+
     node.connect(volumeNode);
     volumeNode.connect(this.gainNode ?? ctx.destination);
 
     node.start(currentTime);
-    node.stop(currentTime + buffer.duration + 0.05);
+    node.stop(currentTime + buffer.duration + 0.1);
   }
 
   private async getBuffer(source: string): Promise<AudioBuffer | null> {

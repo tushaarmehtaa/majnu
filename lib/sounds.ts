@@ -19,11 +19,11 @@ export const SOUNDS = {
 
 // Volume presets for different sound types
 export const SOUND_VOLUMES = {
-    ui: 0.35,           // UI clicks, typewriter
-    feedback: 0.6,      // Correct/wrong guesses
-    outcome: 0.85,      // Win/loss
-    ambient: 0.12,      // Background loop
-    stamp: 0.5,         // Stamp sounds
+    ui: 0.2,            // Subtle clicks, typewriter (was 0.35)
+    feedback: 0.5,      // Clear but not jarring (was 0.6)
+    outcome: 1.0,       // Full dynamic range for win/loss (was 0.85)
+    ambient: 0.08,      // Barely perceptible background (was 0.12)
+    stamp: 0.6,         // Heavy thud for verdicts (was 0.5)
 } as const;
 
 // Sound categories for easy management

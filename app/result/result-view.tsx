@@ -113,7 +113,7 @@ export function ResultView({
             verdictBg
           )}
         >
-          {isWin ? "PARDONED" : "EXECUTED"}
+          {isWin ? "SURVIVED" : "ELIMINATED"}
         </motion.div>
 
         <Card className="overflow-hidden border-2 border-primary/20 bg-[#F5E6D3] shadow-2xl">
@@ -138,12 +138,12 @@ export function ResultView({
                   CASE FILE #{gameInfo?.domainRaw.toUpperCase().slice(0, 3)}-{Math.floor(Math.random() * 1000)}
                 </Badge>
                 <h1 className="font-display text-4xl uppercase tracking-tight text-primary md:text-5xl">
-                  {isWin ? "Justice Served" : "Tragic End"}
+                  {isWin ? COPY.result.title.win : COPY.result.title.loss}
                 </h1>
                 <p className="font-mono text-sm text-foreground/70">
                   {isWin
-                    ? "Majnu lives to paint another donkey."
-                    : "The rope was tight. The crowd was silent."}
+                    ? COPY.result.winDescription
+                    : COPY.result.lossDescription}
                 </p>
               </div>
             </div>
@@ -199,7 +199,7 @@ export function ResultView({
 
           <CardFooter className="relative flex flex-col gap-3 bg-primary/5 p-6 sm:flex-row sm:justify-between">
             <Button variant="outline" className="w-full sm:w-auto" asChild>
-              <Link href="/play">NEW CASE</Link>
+              <Link href="/play">NEXT MISSION</Link>
             </Button>
 
             <div className="flex w-full gap-2 sm:w-auto">
